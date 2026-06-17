@@ -1,6 +1,23 @@
 <script setup lang="ts">
+definePageMeta({
+  middleware: ["auth"]
+})
 const search = ref("")
-const { data: duenos, refresh } = await useFetch("/api/duenos")
+const usuario =
+  useState<any>(
+    "usuario"
+  );
+
+const { data: duenos, refresh } =
+  await useFetch(
+    "/api/duenos",
+    {
+      query: {
+        usuario_id:
+          usuario.value?.id
+      }
+    }
+  );
 
 const filtered = computed(() => {
   const list = duenos.value ?? []

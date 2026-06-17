@@ -1,3 +1,31 @@
+<script setup lang="ts">
+
+const usuario =
+  useState<any>(
+    "usuario",
+    () => null
+  );
+
+function cerrarSesion() {
+
+  if (process.client) {
+
+    localStorage.removeItem(
+      "usuario"
+    );
+
+  }
+
+  usuario.value = null;
+
+  navigateTo(
+    "/login"
+  );
+
+}
+
+</script>
+
 <template>
 
   <div
@@ -45,16 +73,12 @@
           Dashboard
         </NuxtLink>
 
-
-
         <NuxtLink
           to="/vacas"
           class="block px-4 py-3 rounded-xl hover:bg-gray-100 transition"
         >
           Vacas
         </NuxtLink>
-
-
 
         <NuxtLink
           to="/ia"
@@ -107,11 +131,30 @@
           class="flex items-center gap-4"
         >
 
+          <!-- AVATAR -->
+
           <div
             class="w-10 h-10 rounded-full bg-black text-white flex items-center justify-center font-bold"
           >
-            A
+            {{ usuario?.nombre?.charAt(0) }}
           </div>
+
+          <!-- NOMBRE -->
+
+          <div
+            class="font-semibold"
+          >
+            {{ usuario?.nombre }}
+          </div>
+
+          <!-- BOTON LOGOUT -->
+
+          <button
+            @click="cerrarSesion"
+            class="px-4 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition"
+          >
+            Cerrar sesión
+          </button>
 
         </div>
 

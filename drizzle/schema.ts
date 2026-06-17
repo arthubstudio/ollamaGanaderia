@@ -7,10 +7,94 @@ import {
   date,
   numeric,
   timestamp,
-  vector
+  vector,
+  uuid
 } from "drizzle-orm/pg-core";
 
+export const usuarios = pgTable(
+  "usuarios",
+  {
 
+    id: serial("id")
+      .primaryKey(),
+
+    nombre: varchar(
+      "nombre",
+      { length: 100 }
+    ).notNull(),
+
+    email: varchar(
+      "email",
+      { length: 150 }
+    ).notNull(),
+
+    password_hash: text(
+      "password_hash"
+    ).notNull(),
+
+    rol: varchar(
+      "rol",
+      { length: 50 }
+    ),
+
+    created_at: timestamp(
+      "created_at"
+    )
+
+  }
+);
+
+
+export const conversations =
+  pgTable(
+    "conversations",
+    {
+
+      id: uuid("id")
+        .primaryKey(),
+
+      usuario_id:
+        integer("usuario_id"),
+
+      createdAt:
+        timestamp("created_at")
+        .defaultNow(),
+
+      updatedAt:
+        timestamp("updated_at")
+        .defaultNow()
+
+    }
+  );
+
+export const conversationMessages =
+  pgTable(
+    "conversation_messages",
+    {
+      id:
+        serial("id")
+        .primaryKey(),
+
+      conversationId:
+        uuid("conversation_id")
+        .references(
+          () =>
+            conversations.id
+        ),
+
+      role:
+        varchar("role", {
+          length: 20
+        }),
+
+      content:
+        text("content"),
+
+      createdAt:
+        timestamp("created_at")
+        .defaultNow()
+    }
+  );
 
 // =====================================
 // VACAS
@@ -52,6 +136,10 @@ export const vacas = pgTable(
       { length: 50 }
     ),
 
+    usuario_id: integer(
+      "usuario_id"
+    ),
+
     created_at: timestamp(
       "created_at"
     ),
@@ -90,6 +178,11 @@ export const duenos = pgTable(
       "direccion"
     ),
 
+    usuario_id: integer(
+      "usuario_id"
+    ),
+
+
     created_at: timestamp(
       "created_at"
     )
@@ -121,6 +214,10 @@ export const ranchos = pgTable(
 
     dueno_id: integer(
       "dueno_id"
+    ),
+
+    usuario_id: integer(
+      "usuario_id"
     ),
 
     created_at: timestamp(
@@ -377,6 +474,36 @@ export const semanticContexts =
 
       updated_at: timestamp(
         "updated_at"
+      )
+
+    }
+  );
+
+  export const memories =
+  pgTable(
+    "memories",
+    {
+
+      id: serial("id")
+        .primaryKey(),
+
+      usuario_id: integer(
+        "usuario_id"
+      ),
+
+      contenido: text(
+        "contenido"
+      ),
+
+      embedding: vector(
+        "embedding",
+        {
+          dimensions: 768
+        }
+      ),
+
+      created_at: timestamp(
+        "created_at"
       )
 
     }

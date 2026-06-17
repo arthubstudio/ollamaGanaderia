@@ -1,5 +1,59 @@
 <script setup lang="ts">
 
+definePageMeta({
+  middleware: ["auth"]
+})
+
+const usuario =
+  useState<any>(
+    "usuario"
+  );
+
+const conversationId =
+  ref<string | null>(
+    null
+  );
+
+onMounted(async () => {
+
+  if (!usuario.value?.id)
+    return;
+
+  const conv =
+    await $fetch(
+
+      `/api/conversations/by-user/${usuario.value.id}`
+
+    );
+
+  if (conv) {
+
+    conversationId.value =
+      conv.id;
+
+  }
+
+  else {
+
+    const nueva =
+      await $fetch(
+        "/api/conversations/create",
+        {
+          method: "POST",
+          body: {
+            usuario_id:
+              usuario.value.id
+          }
+        }
+      );
+
+    conversationId.value =
+      nueva.conversation_id;
+
+  }
+
+});
+
 const pregunta = ref("");
 
 const respuesta = ref("");
@@ -13,13 +67,14 @@ async function enviar() {
   if (!pregunta.value)
     return;
 
-
+  if (!usuario.value?.id) {
+    respuesta.value = "No hay usuario autenticado.";
+    return;
+  }
 
   loading.value = true;
 
   respuesta.value = "";
-
-
 
   try {
 
@@ -33,14 +88,18 @@ async function enviar() {
           body: {
 
             pregunta:
-              pregunta.value
+              pregunta.value,
+
+            conversation_id:
+              conversationId.value,
+
+            usuario_id:
+              usuario.value.id
 
           }
 
         }
       );
-
-
 
     respuesta.value =
       response.respuesta;
@@ -66,8 +125,6 @@ async function enviar() {
 
 </script>
 
-
-
 <template>
 
   <div
@@ -80,8 +137,6 @@ async function enviar() {
       IA Ganadera
     </h1>
 
-
-
     <!-- INPUT -->
 
     <div
@@ -93,8 +148,6 @@ async function enviar() {
         placeholder="Pregunta algo..."
         class="w-full h-40 border border-gray-200 rounded-2xl p-4 outline-none"
       />
-
-
 
       <button
         @click="enviar"
@@ -110,8 +163,6 @@ async function enviar() {
       </button>
 
     </div>
-
-
 
     <!-- LOADING -->
 
@@ -129,8 +180,6 @@ async function enviar() {
       </span>
 
     </div>
-
-
 
     <!-- RESPUESTA -->
 

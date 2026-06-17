@@ -1,7 +1,33 @@
 <script setup lang="ts">
+definePageMeta({
+  middleware: ["auth"]
+})
 const search = ref("")
-const { data: ranchos, refresh } = await useFetch("/api/ranchos")
-const { data: duenos } = await useFetch("/api/duenos")
+const usuario =
+  useState<any>(
+    "usuario"
+  );
+
+const { data: ranchos, refresh } =
+  await useFetch(
+    "/api/ranchos",
+    {
+      query: {
+        usuario_id:
+          usuario.value?.id
+      }
+    }
+  );
+const { data: duenos } =
+  await useFetch(
+    "/api/duenos",
+    {
+      query: {
+        usuario_id:
+          usuario.value?.id
+      }
+    }
+  );
 
 const ownerName = (id: number) => duenos.value?.find((d: any) => d.id === id)?.nombre ?? "—"
 

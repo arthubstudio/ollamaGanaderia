@@ -10,26 +10,216 @@ const sql = postgres(
 function normalizeText(
   value: string
 ) {
-
   return (value ?? "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-
 }
 
 function hasWords(
   text: string,
   words: string[]
 ) {
-
   return words.every(
     word =>
       text.includes(word)
   );
+}
 
+function slug(text: string) {
+  return normalizeText(text)
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function detectMemoryWrite(
+  text: string
+) {
+  const raw = (text ?? "").trim();
+  const normalized = normalizeText(raw);
+
+  const cleaned = raw
+    .replace(/^recuerda que\s+/i, "")
+    .replace(/^recuerda\s+/i, "")
+    .trim();
+
+  const cleanedNormalized = normalizeText(cleaned);
+
+  if (
+    /^mi vaca favorita es\s+/.test(cleanedNormalized)
+  ) {
+    return {
+      slot: "vaca_favorita",
+      tipo: "preferencia",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (
+    /^mi rancho favorito es\s+/.test(cleanedNormalized)
+  ) {
+    return {
+      slot: "rancho_favorito",
+      tipo: "preferencia",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (
+    /^mi proveedor favorito es\s+/.test(cleanedNormalized)
+  ) {
+    return {
+      slot: "proveedor_favorito",
+      tipo: "preferencia",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (
+    /^mi dueño favorito es\s+/.test(cleanedNormalized) ||
+    /^mi dueno favorito es\s+/.test(cleanedNormalized)
+  ) {
+    return {
+      slot: "dueno_favorito",
+      tipo: "preferencia",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  const favoriteMatch =
+    cleanedNormalized.match(
+      /^mi ([a-z0-9 _-]+?) favorito(?:a)? es\s+(.+)$/
+    );
+
+  if (favoriteMatch) {
+    const subject = favoriteMatch[1] ?? "preferencia";
+    const subjectSlug = slug(subject);
+
+    let slot = `${subjectSlug}_favorito`;
+
+    if (subjectSlug.includes("vaca")) slot = "vaca_favorita";
+    if (subjectSlug.includes("rancho")) slot = "rancho_favorito";
+    if (subjectSlug.includes("proveedor")) slot = "proveedor_favorito";
+    if (subjectSlug.includes("dueno")) slot = "dueno_favorito";
+
+    return {
+      slot,
+      tipo: "preferencia",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  const genericMatch =
+    cleanedNormalized.match(/^mi ([a-z0-9 _-]+?) es\s+(.+)$/);
+
+  if (genericMatch) {
+    const subject = genericMatch[1] ?? "hecho";
+    return {
+      slot: slug(subject),
+      tipo: "hecho",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (/^(me gusta(?:n)?|amo|adoro)\s+/.test(cleanedNormalized)) {
+    return {
+      slot: "me_gusta",
+      tipo: "gusto",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (/^(no me gusta|odio|detesto)\s+/.test(cleanedNormalized)) {
+    return {
+      slot: "no_me_gusta",
+      tipo: "disgusto",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (/^prefiero\s+/.test(cleanedNormalized)) {
+    return {
+      slot: "preferencia",
+      tipo: "preferencia",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (/^(soy|me llamo)\s+/.test(cleanedNormalized)) {
+    return {
+      slot: "identidad",
+      tipo: "identidad",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (/^vivo en\s+/.test(cleanedNormalized)) {
+    return {
+      slot: "vivo_en",
+      tipo: "ubicacion",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (/^trabajo en\s+/.test(cleanedNormalized)) {
+    return {
+      slot: "trabajo_en",
+      tipo: "ocupacion",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  const relationMatch =
+    cleanedNormalized.match(/^(.+?)\s+odia\s+a\s+(.+)$/);
+
+  if (relationMatch) {
+    const subject = slug(relationMatch[1] ?? "alguien");
+    const target = slug(relationMatch[2] ?? "algo");
+
+    return {
+      slot: `rel_${subject}_odia_${target}`,
+      tipo: "relacion",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  if (
+    normalized.startsWith("recuerda que ") ||
+    normalized.startsWith("recuerda ") ||
+    normalized.startsWith("mi ") ||
+    normalized.startsWith("me gusta") ||
+    normalized.startsWith("no me gusta") ||
+    normalized.startsWith("odio") ||
+    normalized.startsWith("prefiero") ||
+    normalized.startsWith("soy ") ||
+    normalized.startsWith("me llamo") ||
+    normalized.startsWith("vivo en") ||
+    normalized.startsWith("trabajo en")
+  ) {
+    return {
+      slot: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      tipo: "general",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré: ${cleaned}.`
+    };
+  }
+
+  return null;
 }
 
 export default defineEventHandler(async (event) => {
@@ -37,15 +227,109 @@ export default defineEventHandler(async (event) => {
   const body =
     await readBody(event);
 
+  const conversationId =
+    body.conversation_id
+      ? String(body.conversation_id)
+      : null;
+
+  const usuarioId =
+    body.usuario_id
+      ? Number(body.usuario_id)
+      : null;
+
   const preguntaOriginal =
     body.pregunta ?? "";
+
+  const memoryWrite =
+    detectMemoryWrite(
+      preguntaOriginal
+    );
+
+  if (
+    usuarioId &&
+    memoryWrite
+  ) {
+
+    await $fetch(
+      "/api/memories/create",
+      {
+
+        method: "POST",
+
+        body: {
+
+          usuario_id:
+            usuarioId,
+
+          slot:
+            memoryWrite.slot,
+
+          tipo:
+            memoryWrite.tipo,
+
+          contenido:
+            memoryWrite.contenido
+
+        }
+
+      }
+    );
+
+    return {
+      tipo: "memoria",
+      respuesta:
+        memoryWrite.respuesta
+    };
+
+  }
 
   const pregunta =
     normalizeText(
       preguntaOriginal
     );
 
+  const esPreguntaDeMemoria =
+    pregunta.includes("recuerda que") ||
+    pregunta.includes("recuerda") ||
+    pregunta.includes("memoria") ||
+    pregunta.includes("memorias") ||
+    pregunta.includes("mi vaca favorita") ||
+    pregunta.includes("mi rancho favorito") ||
+    pregunta.includes("mi proveedor favorito") ||
+    pregunta.includes("que recuerdas de mi") ||
+    pregunta.includes("qué recuerdas de mi") ||
+    pregunta.includes("que sabes de mi") ||
+    pregunta.includes("qué sabes de mi") ||
+    pregunta.includes("que sabes sobre mi") ||
+    pregunta.includes("qué sabes sobre mi") ||
+    pregunta.includes("mis recuerdos") ||
+    pregunta.includes("favorita");
 
+  if (esPreguntaDeMemoria) {
+
+    const memoriaResponse =
+      await $fetch(
+        "/api/ia/chat",
+        {
+          method: "POST",
+          body: {
+            pregunta:
+              preguntaOriginal,
+            conversation_id:
+              conversationId,
+            usuario_id:
+              usuarioId
+          }
+        }
+      );
+
+    return {
+      tipo: "memoria",
+      respuesta:
+        memoriaResponse.respuesta
+    };
+
+  }
 
   // =====================================================
   // FILTRO GANADERO
@@ -53,6 +337,7 @@ export default defineEventHandler(async (event) => {
 
   const palabrasGanaderas = [
 
+    "pesa",
     "vaca",
     "vacas",
     "ganado",
@@ -84,7 +369,6 @@ export default defineEventHandler(async (event) => {
     "veterinario",
     "tratamiento",
     "vender",
-    "venta",
     "activo",
     "activa",
     "baja",
@@ -92,8 +376,6 @@ export default defineEventHandler(async (event) => {
     "vendido"
 
   ];
-
-
 
   const esGanadera =
     palabrasGanaderas.some(
@@ -103,22 +385,18 @@ export default defineEventHandler(async (event) => {
         )
     );
 
-
-
   if (!esGanadera) {
 
-    return {
+    return reply({
 
       tipo: "filtro",
 
       respuesta:
         "No encontré información relacionada en el sistema."
 
-    };
+    });
 
   }
-
-
 
   // =====================================================
   // CARGAR VACAS
@@ -130,8 +408,6 @@ export default defineEventHandler(async (event) => {
     FROM vacas
 
   `;
-
-
 
   // =====================================================
   // DETECTAR VACA
@@ -294,18 +570,16 @@ export default defineEventHandler(async (event) => {
 
     if (!animalMatch) {
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           "No encontré esa vaca."
 
-      };
+      });
 
     }
-
-
 
     const ventaResponse =
       await $fetch(
@@ -324,20 +598,16 @@ export default defineEventHandler(async (event) => {
         }
       );
 
-
-
-    return {
+    return reply({
 
       tipo: "sql",
 
       respuesta:
         ventaResponse.respuesta
 
-    };
+    });
 
   }
-
-
 
   // =====================================================
   // CONTAR HEMBRAS
@@ -367,18 +637,16 @@ export default defineEventHandler(async (event) => {
 
     `;
 
-    return {
+    return reply({
 
       tipo: "sql",
 
       respuesta:
         `Tienes ${result[0].total} vacas hembras.`
 
-    };
+    });
 
   }
-
-
 
   // =====================================================
   // CONTAR MACHOS
@@ -408,18 +676,16 @@ export default defineEventHandler(async (event) => {
 
     `;
 
-    return {
+    return reply({
 
       tipo: "sql",
 
       respuesta:
         `Tienes ${result[0].total} vacas macho.`
 
-    };
+    });
 
   }
-
-
 
   // =====================================================
   // TOTAL VACAS
@@ -445,18 +711,16 @@ export default defineEventHandler(async (event) => {
 
     `;
 
-    return {
+    return reply({
 
       tipo: "sql",
 
       respuesta:
         `Tienes ${result[0].total} vacas registradas.`
 
-    };
+    });
 
   }
-
-
 
   // =====================================================
   // VACAS VACUNADAS
@@ -498,14 +762,14 @@ export default defineEventHandler(async (event) => {
 
     if (!result.length) {
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           "No hay vacas vacunadas."
 
-      };
+      });
 
     }
 
@@ -521,18 +785,16 @@ export default defineEventHandler(async (event) => {
         })
         .join("\n");
 
-    return {
+    return reply({
 
       tipo: "sql",
 
       respuesta:
         `Vacas vacunadas:\n${texto}`
 
-    };
+    });
 
   }
-
-
 
   // =====================================================
   // LISTAR VACAS
@@ -585,14 +847,14 @@ export default defineEventHandler(async (event) => {
 
     if (!result.length) {
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           "No hay vacas registradas."
 
-      };
+      });
 
     }
 
@@ -610,14 +872,14 @@ export default defineEventHandler(async (event) => {
         })
         .join("\n");
 
-    return {
+    return reply({
 
       tipo: "sql",
 
       respuesta:
         `Vacas registradas:\n${texto}`
 
-    };
+    });
 
   }
 
@@ -638,13 +900,11 @@ export default defineEventHandler(async (event) => {
       }
     );
 
-
-
   if (
     functionResponse?.encontrado
   ) {
 
-    return {
+    return reply({
 
       tipo:
         "function-calling",
@@ -661,7 +921,7 @@ export default defineEventHandler(async (event) => {
       resultado:
         functionResponse.resultado
 
-    };
+    });
 
   }
 
@@ -673,8 +933,6 @@ export default defineEventHandler(async (event) => {
 
     const vacaId =
       animalMatch.id;
-
-
 
     // =====================================================
     // PESOS
@@ -695,8 +953,6 @@ export default defineEventHandler(async (event) => {
       ORDER BY fecha DESC
 
     `;
-
-
 
     // =====================================================
     // VACUNAS
@@ -727,8 +983,6 @@ export default defineEventHandler(async (event) => {
 
     `;
 
-
-
     // =====================================================
     // ENFERMEDADES
     // =====================================================
@@ -751,8 +1005,6 @@ export default defineEventHandler(async (event) => {
       ORDER BY fecha DESC
 
     `;
-
-
 
     // =====================================================
     // HISTORIAL
@@ -788,15 +1040,11 @@ export default defineEventHandler(async (event) => {
 
     `;
 
-
-
     const ultimoPeso =
       pesosRows[0] ?? null;
 
     const propiedadActual =
       historialRows[0] ?? null;
-
-
 
     // =====================================================
     // ESTADO ACTUAL
@@ -866,22 +1114,17 @@ export default defineEventHandler(async (event) => {
 
       `;
 
-
-
       const venta =
         ventaRows[0] ?? null;
 
-
-
       if (venta) {
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
 `
-
 ${animalMatch.nombre}
 ya fue vendida.
 
@@ -896,48 +1139,40 @@ ${venta.fecha}
 
 `
 
-        };
+        });
 
       }
-
-
 
       const estado =
         animalMatch.estado
         ?? "activa";
-
-
 
       if (
         estado.toLowerCase()
         === "baja"
       ) {
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
 `${animalMatch.nombre} está dada de baja.`
 
-        };
+        });
 
       }
 
-
-
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
 `${animalMatch.nombre} sigue activa.`
 
-      };
+      });
 
     }
-
-
 
     // =====================================================
     // EDAD
@@ -967,18 +1202,16 @@ ${venta.fecha}
         hoy.getFullYear() -
         nacimiento.getFullYear();
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           `${animalMatch.nombre} tiene aproximadamente ${edad} años.`
 
-      };
+      });
 
     }
-
-
 
     // =====================================================
     // PESO
@@ -998,29 +1231,27 @@ ${venta.fecha}
 
       if (!ultimoPeso) {
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
             `No hay pesos registrados para ${animalMatch.nombre}.`
 
-        };
+        });
 
       }
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           `${animalMatch.nombre} pesa ${ultimoPeso.peso} kg.`
 
-      };
+      });
 
     }
-
-
 
     // =====================================================
     // VETERINARIO
@@ -1041,18 +1272,16 @@ ${venta.fecha}
         const ultima =
           vacunasRows[0];
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
             `El veterinario más reciente de ${animalMatch.nombre} fue ${ultima.veterinario}.`
 
-        };
+        });
 
       }
-
-
 
       if (
         enfermedadesRows.length
@@ -1061,31 +1290,27 @@ ${venta.fecha}
         const ultima =
           enfermedadesRows[0];
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
             `El veterinario de ${animalMatch.nombre} fue ${ultima.veterinario}.`
 
-        };
+        });
 
       }
 
-
-
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           `No hay veterinarios registrados para ${animalMatch.nombre}.`
 
-      };
+      });
 
     }
-
-
 
     // =====================================================
     // TRATAMIENTO
@@ -1103,32 +1328,30 @@ ${venta.fecha}
         !enfermedadesRows.length
       ) {
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
             `${animalMatch.nombre} no tiene tratamientos registrados.`
 
-        };
+        });
 
       }
 
       const ultima =
         enfermedadesRows[0];
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           `El tratamiento de ${animalMatch.nombre} fue: ${ultima.tratamiento}.`
 
-      };
+      });
 
     }
-
-
 
     // =====================================================
     // ENFERMEDADES
@@ -1150,14 +1373,14 @@ ${venta.fecha}
         !enfermedadesRows.length
       ) {
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
             `${animalMatch.nombre} no tiene enfermedades registradas.`
 
-        };
+        });
 
       }
 
@@ -1173,18 +1396,16 @@ ${venta.fecha}
           })
           .join("\n");
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           `Enfermedades de ${animalMatch.nombre}:\n${texto}`
 
-      };
+      });
 
     }
-
-
 
     // =====================================================
     // VACUNAS
@@ -1206,14 +1427,14 @@ ${venta.fecha}
         !vacunasRows.length
       ) {
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
             `${animalMatch.nombre} no tiene vacunas registradas.`
 
-        };
+        });
 
       }
 
@@ -1231,18 +1452,16 @@ ${v.veterinario}
           })
           .join("\n");
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           `Vacunas de ${animalMatch.nombre}:\n${texto}`
 
-      };
+      });
 
     }
-
-
 
     // =====================================================
     // HISTORIAL
@@ -1260,14 +1479,14 @@ ${v.veterinario}
         !historialRows.length
       ) {
 
-        return {
+        return reply({
 
           tipo: "sql",
 
           respuesta:
             `${animalMatch.nombre} no tiene historial.`
 
-        };
+        });
 
       }
 
@@ -1292,30 +1511,27 @@ ${h.fecha_fin ?? "Actual"}
           })
           .join("\n");
 
-      return {
+      return reply({
 
         tipo: "sql",
 
         respuesta:
           `Historial de ${animalMatch.nombre}:\n${texto}`
 
-      };
+      });
 
     }
-
-
 
     // =====================================================
     // RESUMEN GENERAL
     // =====================================================
 
-    return {
+    return reply({
 
       tipo: "sql",
 
       respuesta:
 `
-
 Nombre:
 ${animalMatch.nombre}
 
@@ -1350,7 +1566,7 @@ ${enfermedadesRows.length}
 
 `
 
-    };
+    });
 
   }
 
@@ -1362,26 +1578,31 @@ ${enfermedadesRows.length}
     await $fetch(
       "/api/ia/chat",
       {
-
         method: "POST",
 
         body: {
+
           pregunta:
-            preguntaOriginal
+            preguntaOriginal,
+
+          conversation_id:
+            conversationId,
+
+          usuario_id:
+            usuarioId
+
         }
 
       }
     );
 
-
-
-  return {
+  return reply({
 
     tipo: "rag",
 
     respuesta:
       ragResponse.respuesta
 
-  };
+  });
 
 });

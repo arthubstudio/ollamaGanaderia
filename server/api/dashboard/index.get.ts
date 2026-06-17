@@ -7,50 +7,83 @@ const sql = postgres(
   }
 );
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+
+  const query =
+    getQuery(event);
+
+  const usuarioId =
+    Number(
+      query.usuario_id
+    );
+
+  if (!usuarioId) {
+
+    return {
+
+      totalVacas: 0,
+      vacunasAplicadas: 0,
+      pesoPromedio: 0
+
+    };
+
+  }
 
   // =====================================================
-  // TOTAL VACAS
+  // TOTAL VACAS DEL USUARIO
   // =====================================================
 
   const totalVacas = await sql`
 
     SELECT COUNT(*) AS total
+
     FROM vacas
+
+    WHERE usuario_id =
+    ${usuarioId}
 
   `;
 
-
-
   // =====================================================
-  // VACUNAS
+  // VACUNAS DEL USUARIO
   // =====================================================
 
   const totalVacunas = await sql`
 
     SELECT COUNT(*) AS total
-    FROM vacuna_aplicada
+
+    FROM vacuna_aplicada va
+
+    INNER JOIN vacas v
+    ON v.id = va.vaca_id
+
+    WHERE v.usuario_id =
+    ${usuarioId}
 
   `;
 
-
-
   // =====================================================
-  // PESO PROMEDIO
+  // PESO PROMEDIO DEL USUARIO
   // =====================================================
 
   const pesoPromedio = await sql`
 
     SELECT
+
       ROUND(
-        AVG(peso)::numeric,
+        AVG(p.peso)::numeric,
         2
       ) AS promedio
-    FROM pesos
+
+    FROM pesos p
+
+    INNER JOIN vacas v
+    ON v.id = p.vaca_id
+
+    WHERE v.usuario_id =
+    ${usuarioId}
 
   `;
-
-
 
   return {
 
@@ -65,8 +98,9 @@ export default defineEventHandler(async () => {
       ),
 
     pesoPromedio:
-      pesoPromedio[0].promedio
-        ?? 0
+      Number(
+        pesoPromedio[0].promedio ?? 0
+      )
 
   };
 

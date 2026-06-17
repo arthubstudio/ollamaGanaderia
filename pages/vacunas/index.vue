@@ -1,4 +1,7 @@
 <script setup lang="ts">
+definePageMeta({
+  middleware: ["auth"]
+})
 const search = ref("")
 const { data: vacunas, refresh } = await useFetch("/api/vacunas")
 

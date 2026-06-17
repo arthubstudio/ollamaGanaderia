@@ -1,55 +1,105 @@
 <script setup lang="ts">
 
+definePageMeta({
+  middleware: ["auth"]
+});
+
 const search = ref("");
 
+const usuario =
+  useState<any>(
+    "usuario",
+    () => null
+  );
+
+
 const { data: vacas, refresh } =
-  await useFetch("/api/vacas");
-
-
+  await useFetch(
+    "/api/vacas",
+    {
+      query: {
+        usuario_id:
+          usuario.value?.id
+      }
+    }
+  );
 
 const filteredVacas = computed(() => {
 
-  if (!vacas.value) return [];
+  if (!vacas.value) {
+    return [];
+  }
 
-  return vacas.value.filter((vaca: any) => {
+  return vacas.value.filter(
+    (vaca: any) => {
 
-    return (
+      return (
 
-      vaca.nombre
-        ?.toLowerCase()
-        .includes(search.value.toLowerCase())
+        vaca.nombre
+          ?.toLowerCase()
+          .includes(
+            search.value.toLowerCase()
+          )
 
-      ||
+        ||
 
-      vaca.raza
-        ?.toLowerCase()
-        .includes(search.value.toLowerCase())
+        vaca.raza
+          ?.toLowerCase()
+          .includes(
+            search.value.toLowerCase()
+          )
 
-      ||
+        ||
 
-      vaca.numero_arete
-        ?.toLowerCase()
-        .includes(search.value.toLowerCase())
+        vaca.numero_arete
+          ?.toLowerCase()
+          .includes(
+            search.value.toLowerCase()
+          )
 
-    );
+      );
 
-  });
+    }
+  );
 
 });
 
+async function eliminarVaca(
+  id: number
+) {
 
+  const ok =
+    confirm(
+      "¿Eliminar esta vaca?"
+    );
 
-async function eliminarVaca(id: number) {
-  const ok = confirm("¿Eliminar esta vaca?");
-  if (!ok) return;
+  if (!ok) {
+    return;
+  }
 
   try {
-    await $fetch(`/api/vacas/${id}`, { method: "DELETE" });
+
+    await $fetch(
+      `/api/vacas/${id}`,
+      {
+        method: "DELETE"
+      }
+    );
+
     await refresh();
-  } catch (error) {
-    console.error(error);
-    alert("No se pudo eliminar. Revisa registros relacionados.");
+
   }
+
+  catch (error) {
+
+    console.error(error);
+
+    alert(
+      "No se pudo eliminar. Revisa registros relacionados."
+    );
+
+  }
+
 }
 
 </script>

@@ -1,13 +1,27 @@
 <script setup lang="ts">
 
+definePageMeta({
+  middleware: ["auth"]
+});
+
+const usuario =
+  useState<any>(
+    "usuario",
+    () => null
+  );
+
 const { data } =
   await useFetch(
-    "/api/dashboard"
+    "/api/dashboard",
+    {
+      query: {
+        usuario_id:
+          usuario.value?.id
+      }
+    }
   );
 
 </script>
-
-
 
 <template>
 
@@ -33,15 +47,11 @@ const { data } =
 
     </div>
 
-
-
     <!-- STATS -->
 
     <div
       class="grid grid-cols-1 md:grid-cols-3 gap-6"
     >
-
-      <!-- TOTAL VACAS -->
 
       <div
         class="bg-white rounded-3xl p-8 border border-gray-100"
@@ -61,10 +71,6 @@ const { data } =
 
       </div>
 
-
-
-      <!-- VACUNAS -->
-
       <div
         class="bg-white rounded-3xl p-8 border border-gray-100"
       >
@@ -82,10 +88,6 @@ const { data } =
         </div>
 
       </div>
-
-
-
-      <!-- PESO PROMEDIO -->
 
       <div
         class="bg-white rounded-3xl p-8 border border-gray-100"
@@ -106,8 +108,6 @@ const { data } =
       </div>
 
     </div>
-
-
 
     <!-- ATAJOS -->
 
@@ -134,8 +134,6 @@ const { data } =
 
       </NuxtLink>
 
-
-
       <NuxtLink
         to="/duenos"
         class="bg-white rounded-3xl p-8 border border-gray-100 hover:border-black transition"
@@ -155,8 +153,6 @@ const { data } =
 
       </NuxtLink>
 
-
-
       <NuxtLink
         to="/ranchos"
         class="bg-white rounded-3xl p-8 border border-gray-100 hover:border-black transition"
@@ -175,8 +171,6 @@ const { data } =
         </div>
 
       </NuxtLink>
-
-
 
       <NuxtLink
         to="/ia"
@@ -198,8 +192,6 @@ const { data } =
       </NuxtLink>
 
     </div>
-
-
 
     <!-- RESUMEN -->
 

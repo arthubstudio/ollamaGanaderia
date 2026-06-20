@@ -2,8 +2,19 @@
 const route = useRoute();
 const vacaId = Number(route.params.id);
 
-const { data: duenos } = await useFetch("/api/duenos");
-const { data: ranchos } = await useFetch("/api/ranchos");
+const usuario = useState<any>("usuario", () => null);
+
+const { data: duenos } = await useFetch("/api/duenos", {
+  query: {
+    usuario_id: usuario.value?.id
+  }
+});
+
+const { data: ranchos } = await useFetch("/api/ranchos", {
+  query: {
+    usuario_id: usuario.value?.id
+  }
+});
 
 const form = reactive({
   dueno_id: null as number | null,
@@ -13,16 +24,35 @@ const form = reactive({
 });
 
 async function guardar() {
-  await $fetch("/api/historial-propiedad", {
-    method: "POST",
-    body: {
-      vaca_id: vacaId,
-      dueno_id: form.dueno_id,
-      rancho_id: form.rancho_id,
-      fecha_inicio: form.fecha_inicio,
-      observaciones: form.observaciones,
-    },
-  });
+
+  await $fetch(
+    "/api/historial-propiedad",
+    {
+      method: "POST",
+
+      body: {
+
+        vaca_id:
+          vacaId,
+
+        dueno_id:
+          form.dueno_id,
+
+        rancho_id:
+          form.rancho_id,
+
+        fecha_inicio:
+          form.fecha_inicio,
+
+        observaciones:
+          form.observaciones,
+
+        usuario_id:
+          usuario.value?.id
+
+      }
+    }
+  );
 
   await navigateTo(`/vacas/${vacaId}`);
 }

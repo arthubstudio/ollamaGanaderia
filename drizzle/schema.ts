@@ -11,6 +11,50 @@ import {
   uuid
 } from "drizzle-orm/pg-core";
 
+export const aiLogs = pgTable(
+  "ai_logs",
+  {
+    id: serial("id").primaryKey(),
+
+    session_id: varchar(
+      "session_id",
+      { length: 255 }
+    ),
+
+    timestamp: timestamp(
+      "timestamp"
+    ).defaultNow(),
+
+    user_prompt: text(
+      "user_prompt"
+    ),
+
+    system_response: text(
+      "system_response"
+    ),
+
+    ttft_ms: integer(
+      "ttft_ms"
+    ),
+
+    total_latency_ms: integer(
+      "total_latency_ms"
+    ),
+
+    tokens_per_second: numeric(
+      "tokens_per_second"
+    ),
+
+    was_blocked: integer(
+      "was_blocked"
+    ),
+
+    tools_executed: text(
+      "tools_executed"
+    )
+  }
+);
+
 export const usuarios = pgTable(
   "usuarios",
   {
@@ -288,6 +332,10 @@ export const vacunas = pgTable(
 
     descripcion: text(
       "descripcion"
+    ),
+
+    usuario_id: integer(
+      "usuario_id"
     )
 
   }

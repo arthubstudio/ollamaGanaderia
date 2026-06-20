@@ -1,4 +1,7 @@
 import postgres from "postgres";
+import ollama from "ollama";
+import { setResponseHeader } from "h3";
+import { detectPromptInjection } from "~/server/lib/guardrails";
 
 const sql = postgres(
   "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
@@ -7,9 +10,22 @@ const sql = postgres(
   }
 );
 
-function normalizeText(
-  value: string
-) {
+type ChatBody = {
+  pregunta?: string;
+  conversation_id?: string | number | null;
+  usuario_id?: string | number | null;
+  stream?: boolean;
+};
+
+type ToolExecution = {
+  name: string;
+  status: "SUCCESS" | "ERROR";
+  params?: unknown;
+  result?: unknown;
+  error?: string;
+};
+
+function normalizeText(value: string) {
   return (value ?? "")
     .toLowerCase()
     .normalize("NFD")
@@ -18,14 +34,8 @@ function normalizeText(
     .trim();
 }
 
-function hasWords(
-  text: string,
-  words: string[]
-) {
-  return words.every(
-    word =>
-      text.includes(word)
-  );
+function hasWords(text: string, words: string[]) {
+  return words.every((word) => text.includes(word));
 }
 
 function slug(text: string) {
@@ -34,9 +44,16 @@ function slug(text: string) {
     .replace(/^_+|_+$/g, "");
 }
 
-function detectMemoryWrite(
-  text: string
-) {
+function approxTokenCount(text: string) {
+  return (text.trim().match(/\S+/g) ?? []).length;
+}
+
+function tokenizeForStreaming(text: string) {
+  const parts = text.match(/\S+\s*/g);
+  return parts && parts.length ? parts : [text];
+}
+
+function detectMemoryWrite(text: string) {
   const raw = (text ?? "").trim();
   const normalized = normalizeText(raw);
 
@@ -47,9 +64,7 @@ function detectMemoryWrite(
 
   const cleanedNormalized = normalizeText(cleaned);
 
-  if (
-    /^mi vaca favorita es\s+/.test(cleanedNormalized)
-  ) {
+  if (/^mi vaca favorita es\s+/.test(cleanedNormalized)) {
     return {
       slot: "vaca_favorita",
       tipo: "preferencia",
@@ -58,9 +73,7 @@ function detectMemoryWrite(
     };
   }
 
-  if (
-    /^mi rancho favorito es\s+/.test(cleanedNormalized)
-  ) {
+  if (/^mi rancho favorito es\s+/.test(cleanedNormalized)) {
     return {
       slot: "rancho_favorito",
       tipo: "preferencia",
@@ -69,9 +82,7 @@ function detectMemoryWrite(
     };
   }
 
-  if (
-    /^mi proveedor favorito es\s+/.test(cleanedNormalized)
-  ) {
+  if (/^mi proveedor favorito es\s+/.test(cleanedNormalized)) {
     return {
       slot: "proveedor_favorito",
       tipo: "preferencia",
@@ -93,16 +104,13 @@ function detectMemoryWrite(
   }
 
   const favoriteMatch =
-    cleanedNormalized.match(
-      /^mi ([a-z0-9 _-]+?) favorito(?:a)? es\s+(.+)$/
-    );
+    cleanedNormalized.match(/^mi ([a-z0-9 _-]+?) favorito(?:a)? es\s+(.+)$/);
 
   if (favoriteMatch) {
     const subject = favoriteMatch[1] ?? "preferencia";
     const subjectSlug = slug(subject);
 
     let slot = `${subjectSlug}_favorito`;
-
     if (subjectSlug.includes("vaca")) slot = "vaca_favorita";
     if (subjectSlug.includes("rancho")) slot = "rancho_favorito";
     if (subjectSlug.includes("proveedor")) slot = "proveedor_favorito";
@@ -222,909 +230,856 @@ function detectMemoryWrite(
   return null;
 }
 
-export default defineEventHandler(async (event) => {
+function memorySlotFromQuestion(text: string) {
+  const t = normalizeText(text);
 
-  const body =
-    await readBody(event);
+  if (t.includes("vaca favorita")) return "vaca_favorita";
+  if (t.includes("rancho favorito")) return "rancho_favorito";
+  if (t.includes("proveedor favorito")) return "proveedor_favorito";
+  if (t.includes("dueño favorito") || t.includes("dueno favorito")) return "dueno_favorito";
+  if (t.includes("me gusta")) return "me_gusta";
+  if (t.includes("no me gusta")) return "no_me_gusta";
+  if (t.includes("prefiero")) return "preferencia";
+  if (t.includes("soy") || t.includes("me llamo")) return "identidad";
+  if (t.includes("vivo en")) return "vivo_en";
+  if (t.includes("trabajo en")) return "trabajo_en";
+
+  return null;
+}
+
+function isMemoryQuestion(text: string) {
+  const t = normalizeText(text);
+
+  return (
+    t.includes("que recuerdas de mi") ||
+    t.includes("qué recuerdas de mí") ||
+    t.includes("que sabes de mi") ||
+    t.includes("qué sabes de mí") ||
+    t.includes("que sabes sobre mi") ||
+    t.includes("qué sabes sobre mí") ||
+    t.includes("que recuerdas") ||
+    t.includes("qué recuerdas") ||
+    t.includes("vaca favorita") ||
+    t.includes("rancho favorito") ||
+    t.includes("proveedor favorito") ||
+    t.includes("dueno favorito") ||
+    t.includes("dueño favorito")
+  );
+}
+
+function buildRagMessages(params: {
+  preguntaOriginal: string;
+  contextoMemorias: string;
+  contextoGanadero: string;
+  historial: { role: string; content: string }[];
+}) {
+  return [
+    {
+      role: "system",
+      content: `
+Eres un sistema privado de gestión ganadera con memoria personal por usuario.
+
+REGLAS OBLIGATORIAS:
+- Usa primero las MEMORIAS DEL USUARIO si existen.
+- Usa el CONTEXTO GANADERO si existe.
+- Usa el HISTORIAL DE CONVERSACIÓN si ayuda a responder.
+- NO inventes información.
+- NO uses conocimiento externo.
+- NO expliques conceptos generales.
+- Si la pregunta no está relacionada con las memorias, el contexto ni el historial, responde exactamente:
+  "No encontré información relacionada en el sistema."
+
+- Responde breve, clara y natural.
+`.trim()
+    },
+    {
+      role: "user",
+      content: `
+MEMORIAS DEL USUARIO:
+
+${params.contextoMemorias || "Sin memorias relevantes."}
+
+CONTEXTO GANADERO:
+
+${params.contextoGanadero || "Sin contexto ganadero relevante."}
+`.trim()
+    },
+    ...params.historial.map((m) => ({
+      role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+      content: m.content ?? ""
+    })),
+    {
+      role: "user",
+      content: `
+PREGUNTA ACTUAL:
+
+${params.preguntaOriginal}
+
+RESPUESTA:
+`.trim()
+    }
+  ];
+}
+
+export default defineEventHandler(async (event) => {
+  const requestStart = Date.now();
+  const body = (await readBody(event)) as ChatBody;
 
   const conversationId =
-    body.conversation_id
+    body.conversation_id != null
       ? String(body.conversation_id)
       : null;
 
   const usuarioId =
-    body.usuario_id
+    body.usuario_id != null
       ? Number(body.usuario_id)
       : null;
 
-  const preguntaOriginal =
-    body.pregunta ?? "";
+  const preguntaOriginal = body.pregunta ?? "";
+  const wantsStream = Boolean(body.stream);
+  const sessionId = conversationId ?? `user:${usuarioId ?? "anonymous"}`;
+  const toolsExecuted: ToolExecution[] = [];
 
-  const memoryWrite =
-    detectMemoryWrite(
-      preguntaOriginal
+  if (wantsStream) {
+    setResponseHeader(event, "Content-Type", "text/event-stream; charset=utf-8");
+    setResponseHeader(event, "Cache-Control", "no-cache, no-transform");
+    setResponseHeader(event, "Connection", "keep-alive");
+    setResponseHeader(event, "X-Accel-Buffering", "no");
+    event.node.res.flushHeaders?.();
+  }
+
+  const historialDesc: { role: string; content: string }[] = conversationId
+    ? await sql`
+        SELECT
+          role,
+          content
+        FROM conversation_messages
+        WHERE conversation_id = ${conversationId}
+        ORDER BY id DESC
+        LIMIT 20
+      `
+    : [];
+
+  const historial = historialDesc.slice().reverse();
+
+  async function insertConversationMessage(role: "user" | "assistant", content: string) {
+    if (!conversationId) return;
+
+    await sql`
+      INSERT INTO conversation_messages (
+        conversation_id,
+        role,
+        content
+      )
+      VALUES (
+        ${conversationId},
+        ${role},
+        ${content}
+      )
+    `;
+  }
+
+  async function logAi(params: {
+    responseText: string;
+    ttftMs: number | null;
+    wasBlocked: boolean;
+    toolsExecuted: ToolExecution[];
+  }) {
+    const totalLatencyMs = Date.now() - requestStart;
+    const tokenCount = approxTokenCount(params.responseText);
+    const generationMs = Math.max(
+      1,
+      totalLatencyMs - (params.ttftMs ?? 0)
     );
+    const tokensPerSecond =
+      tokenCount > 0 ? tokenCount / (generationMs / 1000) : null;
 
-  if (
-    usuarioId &&
-    memoryWrite
+    await sql`
+      INSERT INTO ai_logs (
+        session_id,
+        timestamp,
+        user_prompt,
+        system_response,
+        ttft_ms,
+        total_latency_ms,
+        tokens_per_second,
+        was_blocked,
+        tools_executed
+      )
+      VALUES (
+        ${sessionId},
+        NOW(),
+        ${preguntaOriginal},
+        ${params.responseText},
+        ${params.ttftMs},
+        ${totalLatencyMs},
+        ${tokensPerSecond},
+        ${params.wasBlocked ? 1 : 0},
+        ${JSON.stringify(params.toolsExecuted)}
+      )
+    `;
+  }
+
+  function sseWrite(payload: unknown, eventName = "message") {
+    if (!wantsStream) return;
+
+    if (eventName === "end") {
+      event.node.res.write(`event: end\ndata: done\n\n`);
+      return;
+    }
+
+    event.node.res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  }
+
+  async function streamTextAndFinish(
+    tipo: string,
+    texto: string,
+    meta?: {
+      wasBlocked?: boolean;
+      ttftMs?: number | null;
+      tools?: ToolExecution[];
+      alreadyStreamed?: boolean;
+    }
   ) {
+    if (conversationId) {
+      await insertConversationMessage("assistant", texto);
+    }
 
-    await $fetch(
-      "/api/memories/create",
-      {
+    await logAi({
+      responseText: texto,
+      ttftMs: meta?.ttftMs ?? null,
+      wasBlocked: meta?.wasBlocked ?? false,
+      toolsExecuted: meta?.tools ?? toolsExecuted
+    });
 
-        method: "POST",
-
-        body: {
-
-          usuario_id:
-            usuarioId,
-
-          slot:
-            memoryWrite.slot,
-
-          tipo:
-            memoryWrite.tipo,
-
-          contenido:
-            memoryWrite.contenido
-
+    if (wantsStream) {
+      if (!meta?.alreadyStreamed) {
+        for (const part of tokenizeForStreaming(texto)) {
+          sseWrite({ token: part });
         }
-
       }
-    );
 
-    return {
-      tipo: "memoria",
-      respuesta:
-        memoryWrite.respuesta
-    };
-
-  }
-
-  const pregunta =
-    normalizeText(
-      preguntaOriginal
-    );
-
-  const esPreguntaDeMemoria =
-    pregunta.includes("recuerda que") ||
-    pregunta.includes("recuerda") ||
-    pregunta.includes("memoria") ||
-    pregunta.includes("memorias") ||
-    pregunta.includes("mi vaca favorita") ||
-    pregunta.includes("mi rancho favorito") ||
-    pregunta.includes("mi proveedor favorito") ||
-    pregunta.includes("que recuerdas de mi") ||
-    pregunta.includes("qué recuerdas de mi") ||
-    pregunta.includes("que sabes de mi") ||
-    pregunta.includes("qué sabes de mi") ||
-    pregunta.includes("que sabes sobre mi") ||
-    pregunta.includes("qué sabes sobre mi") ||
-    pregunta.includes("mis recuerdos") ||
-    pregunta.includes("favorita");
-
-  if (esPreguntaDeMemoria) {
-
-    const memoriaResponse =
-      await $fetch(
-        "/api/ia/chat",
-        {
-          method: "POST",
-          body: {
-            pregunta:
-              preguntaOriginal,
-            conversation_id:
-              conversationId,
-            usuario_id:
-              usuarioId
-          }
-        }
-      );
-
-    return {
-      tipo: "memoria",
-      respuesta:
-        memoriaResponse.respuesta
-    };
-
-  }
-
-  // =====================================================
-  // FILTRO GANADERO
-  // =====================================================
-
-  const palabrasGanaderas = [
-
-    "pesa",
-    "vaca",
-    "vacas",
-    "ganado",
-    "peso",
-    "pesos",
-    "vacuna",
-    "vacunas",
-    "vacunada",
-    "vacunadas",
-    "vacunado",
-    "vacunados",
-    "enfermedad",
-    "enfermedades",
-    "rancho",
-    "ranchos",
-    "dueno",
-    "dueño",
-    "animal",
-    "animales",
-    "hembra",
-    "hembras",
-    "macho",
-    "machos",
-    "arete",
-    "venta",
-    "ventas",
-    "historial",
-    "propiedad",
-    "veterinario",
-    "tratamiento",
-    "vender",
-    "activo",
-    "activa",
-    "baja",
-    "vendida",
-    "vendido"
-
-  ];
-
-  const esGanadera =
-    palabrasGanaderas.some(
-      palabra =>
-        pregunta.includes(
-          palabra
-        )
-    );
-
-  if (!esGanadera) {
-
-    return reply({
-
-      tipo: "filtro",
-
-      respuesta:
-        "No encontré información relacionada en el sistema."
-
-    });
-
-  }
-
-  // =====================================================
-  // CARGAR VACAS
-  // =====================================================
-
-  const vacas = await sql`
-
-    SELECT *
-    FROM vacas
-
-  `;
-
-  // =====================================================
-  // DETECTAR VACA
-  // =====================================================
-
-  const animalMatch =
-    vacas.find((v: any) => {
-
-      const nombre =
-        normalizeText(
-          v.nombre ?? ""
-        );
-
-      const arete =
-        normalizeText(
-          v.numero_arete ?? ""
-        );
-
-      return (
-
-        pregunta.includes(
-          nombre
-        ) ||
-
-        pregunta.includes(
-          arete
-        )
-
-      );
-
-    }) ?? null;
-
-  // =====================================================
-  // LISTA PARA VENTA
-  // =====================================================
-
-  if (
-
-    pregunta.includes(
-      "lista para venta"
-    ) ||
-
-    pregunta.includes(
-      "apta para la venta"
-    ) ||
-
-    pregunta.includes(
-      "lista para la venta"
-    ) ||
-
-    pregunta.includes(
-      "lista para vender"
-    ) ||
-
-    pregunta.includes(
-      "apta para venta"
-    ) ||
-
-    pregunta.includes(
-      "apta para vender"
-    ) ||
-
-    pregunta.includes(
-      "se puede vender"
-    ) ||
-
-    pregunta.includes(
-      "puede venderse"
-    ) ||
-
-    pregunta.includes(
-      "ya se puede vender"
-    ) ||
-
-    pregunta.includes(
-      "ya puede venderse"
-    ) ||
-
-    pregunta.includes(
-      "puedo venderla"
-    ) ||
-
-    pregunta.includes(
-      "puedo venderlo"
-    ) ||
-
-    pregunta.includes(
-      "esta lista para venderse"
-    ) ||
-
-    pregunta.includes(
-      "esta lista para venta"
-    ) ||
-
-    pregunta.includes(
-      "esta apta para venta"
-    ) ||
-
-    pregunta.includes(
-      "esta apta para venderse"
-    ) ||
-
-    pregunta.includes(
-      "cumple requisitos de venta"
-    ) ||
-
-    pregunta.includes(
-      "cumple con vacunas"
-    ) ||
-
-    pregunta.includes(
-      "cumple requisitos sanitarios"
-    ) ||
-
-    pregunta.includes(
-      "cumple para venta"
-    ) ||
-
-    pregunta.includes(
-      "lista para comercializacion"
-    ) ||
-
-    pregunta.includes(
-      "puede comercializarse"
-    ) ||
-
-    pregunta.includes(
-      "ya esta vacunada para venta"
-    ) ||
-
-    pregunta.includes(
-      "tiene vacunas para venta"
-    ) ||
-
-    pregunta.includes(
-      "esta preparada para venta"
-    ) ||
-
-    pregunta.includes(
-      "lista para salir al mercado"
-    ) ||
-
-    pregunta.includes(
-      "lista para traslado"
-    ) ||
-
-    pregunta.includes(
-      "lista para movilizacion"
-    ) ||
-
-    pregunta.includes(
-      "puede transportarse"
-    ) ||
-
-    pregunta.includes(
-      "cumple para movilizacion"
-    )
-
-  ) {
-
-    if (!animalMatch) {
-
-      return reply({
-
-        tipo: "sql",
-
-        respuesta:
-          "No encontré esa vaca."
-
-      });
-
+      sseWrite({ estado: "" });
+      sseWrite("done", "end");
+      event.node.res.end();
+      return;
     }
 
-    const ventaResponse =
-      await $fetch(
-        "/api/ia/venta",
-        {
-
-          method: "POST",
-
-          body: {
-
-            nombre:
-              animalMatch.nombre
-
-          }
-
-        }
-      );
-
-    return reply({
-
-      tipo: "sql",
-
-      respuesta:
-        ventaResponse.respuesta
-
-    });
-
+    return {
+      tipo,
+      respuesta: texto
+    };
   }
 
-  // =====================================================
-  // CONTAR HEMBRAS
-  // =====================================================
-
-  if (
-
-    hasWords(
-      pregunta,
-      ["cuantas", "hembras"]
-    ) ||
-
-    hasWords(
-      pregunta,
-      ["cuantas", "hembra"]
-    )
-
+  async function finish(
+    tipo: string,
+    texto: string,
+    meta?: {
+      wasBlocked?: boolean;
+      ttftMs?: number | null;
+      tools?: ToolExecution[];
+      alreadyStreamed?: boolean;
+    }
   ) {
-
-    const result = await sql`
-
-      SELECT COUNT(*) AS total
-      FROM vacas
-
-      WHERE LOWER(sexo)
-      = 'hembra'
-
-    `;
-
-    return reply({
-
-      tipo: "sql",
-
-      respuesta:
-        `Tienes ${result[0].total} vacas hembras.`
-
-    });
-
+    return await streamTextAndFinish(tipo, texto, meta);
   }
 
-  // =====================================================
-  // CONTAR MACHOS
-  // =====================================================
-
-  if (
-
-    hasWords(
-      pregunta,
-      ["cuantos", "machos"]
-    ) ||
-
-    hasWords(
-      pregunta,
-      ["cuantos", "macho"]
-    )
-
-  ) {
-
-    const result = await sql`
-
-      SELECT COUNT(*) AS total
-      FROM vacas
-
-      WHERE LOWER(sexo)
-      = 'macho'
-
-    `;
-
-    return reply({
-
-      tipo: "sql",
-
-      respuesta:
-        `Tienes ${result[0].total} vacas macho.`
-
-    });
-
-  }
-
-  // =====================================================
-  // TOTAL VACAS
-  // =====================================================
-
-  if (
-
-    hasWords(
-      pregunta,
-      ["cuantas", "vacas"]
-    ) ||
-
-    pregunta.includes(
-      "total vacas"
-    )
-
-  ) {
-
-    const result = await sql`
-
-      SELECT COUNT(*) AS total
-      FROM vacas
-
-    `;
-
-    return reply({
-
-      tipo: "sql",
-
-      respuesta:
-        `Tienes ${result[0].total} vacas registradas.`
-
-    });
-
-  }
-
-  // =====================================================
-  // VACAS VACUNADAS
-  // =====================================================
-
-  if (
-
-    pregunta.includes(
-      "vacunada"
-    ) ||
-
-    pregunta.includes(
-      "vacunadas"
-    ) ||
-
-    pregunta.includes(
-      "vacunado"
-    ) ||
-
-    pregunta.includes(
-      "vacunados"
-    )
-
-  ) {
-
-    const result = await sql`
-
-      SELECT DISTINCT
-
-        v.nombre,
-        v.numero_arete
-
-      FROM vacas v
-
-      INNER JOIN vacuna_aplicada va
-      ON va.vaca_id = v.id
-
-    `;
-
-    if (!result.length) {
-
-      return reply({
-
-        tipo: "sql",
-
-        respuesta:
-          "No hay vacas vacunadas."
-
-      });
-
+  try {
+    if (conversationId) {
+      await insertConversationMessage("user", preguntaOriginal);
     }
 
-    const texto =
-      result
-        .map((v: any) => {
+    // =====================================================
+    // GUARDRAILS
+    // =====================================================
 
-          return `
-- ${v.nombre}
-(${v.numero_arete})
-`;
+    if (detectPromptInjection(preguntaOriginal)) {
+      toolsExecuted.push({
+        name: "guardrail.prompt_injection",
+        status: "SUCCESS",
+        params: { pregunta: preguntaOriginal },
+        result: { blocked: true }
+      });
 
-        })
+      if (wantsStream) {
+        sseWrite({ estado: "Solicitud bloqueada por seguridad." });
+      }
+
+      return await finish("guardrail", "Solicitud bloqueada por seguridad.", {
+        wasBlocked: true,
+        tools: toolsExecuted
+      });
+    }
+
+    // =====================================================
+    // MEMORIA ESCRITA
+    // =====================================================
+
+    const memoryWrite = detectMemoryWrite(preguntaOriginal);
+
+    if (usuarioId && memoryWrite) {
+      toolsExecuted.push({
+        name: "memories.create",
+        status: "SUCCESS",
+        params: {
+          usuario_id: usuarioId,
+          slot: memoryWrite.slot,
+          tipo: memoryWrite.tipo,
+          contenido: memoryWrite.contenido
+        }
+      });
+
+      try {
+        const created = await $fetch("/api/memories/create", {
+          method: "POST",
+          body: {
+            usuario_id: usuarioId,
+            slot: memoryWrite.slot,
+            tipo: memoryWrite.tipo,
+            contenido: memoryWrite.contenido
+          }
+        });
+
+        toolsExecuted[0].result = created;
+      } catch (error: any) {
+        toolsExecuted[0].status = "ERROR";
+        toolsExecuted[0].error = String(error?.message ?? error);
+      }
+
+      if (wantsStream) sseWrite({ estado: "Guardando memoria..." });
+
+      return await finish("memoria", memoryWrite.respuesta, {
+        tools: toolsExecuted
+      });
+    }
+
+    // =====================================================
+    // CONSULTA DE MEMORIA
+    // =====================================================
+
+    if (usuarioId && isMemoryQuestion(preguntaOriginal)) {
+      const memoriesUsuario = await sql`
+        SELECT
+          slot,
+          contenido,
+          updated_at
+        FROM memories
+        WHERE usuario_id = ${usuarioId}
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 20
+      `;
+
+      let respuestaMemoria = "";
+
+      const memorySlot = memorySlotFromQuestion(preguntaOriginal);
+
+      if (memorySlot) {
+        const exact = memoriesUsuario.find(
+          (m: any) => normalizeText(m.slot ?? "") === memorySlot
+        );
+
+        if (exact?.contenido) {
+          if (memorySlot === "vaca_favorita") {
+            const nombre = exact.contenido
+              .replace(/^mi vaca favorita es\s+/i, "")
+              .replace(/^recuerda que\s+/i, "")
+              .trim();
+            respuestaMemoria = `Tu vaca favorita es ${nombre}.`;
+          } else if (memorySlot === "rancho_favorito") {
+            const nombre = exact.contenido
+              .replace(/^mi rancho favorito es\s+/i, "")
+              .replace(/^recuerda que\s+/i, "")
+              .trim();
+            respuestaMemoria = `Tu rancho favorito es ${nombre}.`;
+          } else if (memorySlot === "proveedor_favorito") {
+            const nombre = exact.contenido
+              .replace(/^mi proveedor favorito es\s+/i, "")
+              .replace(/^recuerda que\s+/i, "")
+              .trim();
+            respuestaMemoria = `Tu proveedor favorito es ${nombre}.`;
+          } else if (memorySlot === "dueno_favorito") {
+            const nombre = exact.contenido
+              .replace(/^mi dueño favorito es\s+/i, "")
+              .replace(/^mi dueno favorito es\s+/i, "")
+              .replace(/^recuerda que\s+/i, "")
+              .trim();
+            respuestaMemoria = `Tu dueño favorito es ${nombre}.`;
+          } else {
+            respuestaMemoria = exact.contenido;
+          }
+        }
+      }
+
+      if (!respuestaMemoria) {
+        if (!memoriesUsuario.length) {
+          respuestaMemoria = "No tengo recuerdos almacenados sobre ti.";
+        } else {
+          respuestaMemoria =
+            "Recuerdo lo siguiente:\n\n" +
+            memoriesUsuario
+              .map((m: any) => `• ${m.contenido}`)
+              .join("\n");
+        }
+      }
+
+      if (wantsStream) sseWrite({ estado: "Recuperando memorias..." });
+
+      return await finish("memoria", respuestaMemoria, {
+        tools: toolsExecuted
+      });
+    }
+
+    // =====================================================
+    // FILTRO GANADERO
+    // =====================================================
+
+    const pregunta = normalizeText(preguntaOriginal);
+
+    const palabrasGanaderas = [
+      "pesa",
+      "vaca",
+      "vacas",
+      "ganado",
+      "peso",
+      "pesos",
+      "vacuna",
+      "vacunas",
+      "vacunada",
+      "vacunadas",
+      "vacunado",
+      "vacunados",
+      "enfermedad",
+      "enfermedades",
+      "rancho",
+      "ranchos",
+      "dueno",
+      "dueño",
+      "animal",
+      "animales",
+      "hembra",
+      "hembras",
+      "macho",
+      "machos",
+      "arete",
+      "venta",
+      "ventas",
+      "historial",
+      "propiedad",
+      "veterinario",
+      "tratamiento",
+      "vender",
+      "activo",
+      "activa",
+      "baja",
+      "vendida",
+      "vendido"
+    ];
+
+    const esGanadera = palabrasGanaderas.some((palabra) =>
+      pregunta.includes(palabra)
+    );
+
+    if (!esGanadera) {
+      if (wantsStream) sseWrite({ estado: "No encontré información relacionada." });
+
+      return await finish(
+        "filtro",
+        "No encontré información relacionada en el sistema.",
+        { tools: toolsExecuted }
+      );
+    }
+
+    if (wantsStream) sseWrite({ estado: "Buscando información..." });
+
+    // =====================================================
+    // CARGAR VACAS
+    // =====================================================
+
+    const vacas = usuarioId
+      ? await sql`
+          SELECT *
+          FROM vacas
+          WHERE usuario_id = ${usuarioId}
+        `
+      : await sql`
+          SELECT *
+          FROM vacas
+        `;
+
+    // =====================================================
+    // DETECTAR VACA
+    // =====================================================
+
+    const animalMatch =
+      vacas.find((v: any) => {
+        const nombre = normalizeText(v.nombre ?? "");
+        const arete = normalizeText(v.numero_arete ?? "");
+
+        return pregunta.includes(nombre) || pregunta.includes(arete);
+      }) ?? null;
+
+    // =====================================================
+    // LISTA PARA VENTA
+    // =====================================================
+
+    if (
+      pregunta.includes("lista para venta") ||
+      pregunta.includes("apta para la venta") ||
+      pregunta.includes("lista para la venta") ||
+      pregunta.includes("lista para vender") ||
+      pregunta.includes("apta para venta") ||
+      pregunta.includes("apta para vender") ||
+      pregunta.includes("se puede vender") ||
+      pregunta.includes("puede venderse") ||
+      pregunta.includes("ya se puede vender") ||
+      pregunta.includes("ya puede venderse") ||
+      pregunta.includes("puedo venderla") ||
+      pregunta.includes("puedo venderlo") ||
+      pregunta.includes("esta lista para venderse") ||
+      pregunta.includes("esta lista para venta") ||
+      pregunta.includes("esta apta para venta") ||
+      pregunta.includes("esta apta para venderse") ||
+      pregunta.includes("cumple requisitos de venta") ||
+      pregunta.includes("cumple con vacunas") ||
+      pregunta.includes("cumple requisitos sanitarios") ||
+      pregunta.includes("cumple para venta") ||
+      pregunta.includes("lista para comercializacion") ||
+      pregunta.includes("puede comercializarse") ||
+      pregunta.includes("ya esta vacunada para venta") ||
+      pregunta.includes("tiene vacunas para venta") ||
+      pregunta.includes("esta preparada para venta") ||
+      pregunta.includes("lista para salir al mercado") ||
+      pregunta.includes("lista para traslado") ||
+      pregunta.includes("lista para movilizacion") ||
+      pregunta.includes("puede transportarse") ||
+      pregunta.includes("cumple para movilizacion")
+    ) {
+      if (!animalMatch) {
+        return await finish("sql", "No encontré esa vaca.", {
+          tools: toolsExecuted
+        });
+      }
+
+      toolsExecuted.push({
+        name: "ia.venta",
+        status: "SUCCESS",
+        params: {
+          nombre: animalMatch.nombre
+        }
+      });
+
+      const ventaResponse = await $fetch("/api/ia/venta", {
+        method: "POST",
+        body: {
+          nombre: animalMatch.nombre
+        }
+      });
+
+      toolsExecuted[toolsExecuted.length - 1].result = ventaResponse;
+
+      if (wantsStream) {
+        sseWrite({ estado: "Ejecutando acción..." });
+      }
+
+      return await finish("sql", ventaResponse.respuesta, {
+        tools: toolsExecuted
+      });
+    }
+
+    // =====================================================
+    // CONTAR HEMBRAS
+    // =====================================================
+
+    if (
+      hasWords(pregunta, ["cuantas", "hembras"]) ||
+      hasWords(pregunta, ["cuantas", "hembra"])
+    ) {
+      const result = usuarioId
+        ? await sql`
+            SELECT COUNT(*) AS total
+            FROM vacas
+            WHERE LOWER(sexo) = 'hembra'
+              AND usuario_id = ${usuarioId}
+          `
+        : await sql`
+            SELECT COUNT(*) AS total
+            FROM vacas
+            WHERE LOWER(sexo) = 'hembra'
+          `;
+
+      return await finish(
+        "sql",
+        `Tienes ${result[0].total} vacas hembras.`,
+        { tools: toolsExecuted }
+      );
+    }
+
+    // =====================================================
+    // CONTAR MACHOS
+    // =====================================================
+
+    if (
+      hasWords(pregunta, ["cuantos", "machos"]) ||
+      hasWords(pregunta, ["cuantos", "macho"])
+    ) {
+      const result = usuarioId
+        ? await sql`
+            SELECT COUNT(*) AS total
+            FROM vacas
+            WHERE LOWER(sexo) = 'macho'
+              AND usuario_id = ${usuarioId}
+          `
+        : await sql`
+            SELECT COUNT(*) AS total
+            FROM vacas
+            WHERE LOWER(sexo) = 'macho'
+          `;
+
+      return await finish(
+        "sql",
+        `Tienes ${result[0].total} vacas macho.`,
+        { tools: toolsExecuted }
+      );
+    }
+
+    // =====================================================
+    // TOTAL VACAS
+    // =====================================================
+
+    if (
+      hasWords(pregunta, ["cuantas", "vacas"]) ||
+      pregunta.includes("total vacas")
+    ) {
+      const result = usuarioId
+        ? await sql`
+            SELECT COUNT(*) AS total
+            FROM vacas
+            WHERE usuario_id = ${usuarioId}
+          `
+        : await sql`
+            SELECT COUNT(*) AS total
+            FROM vacas
+          `;
+
+      return await finish(
+        "sql",
+        `Tienes ${result[0].total} vacas registradas.`,
+        { tools: toolsExecuted }
+      );
+    }
+
+    // =====================================================
+    // VACAS VACUNADAS
+    // =====================================================
+
+    if (
+      pregunta.includes("vacunada") ||
+      pregunta.includes("vacunadas") ||
+      pregunta.includes("vacunado") ||
+      pregunta.includes("vacunados")
+    ) {
+      const result = usuarioId
+        ? await sql`
+            SELECT DISTINCT
+              v.nombre,
+              v.numero_arete
+            FROM vacas v
+            INNER JOIN vacuna_aplicada va
+              ON va.vaca_id = v.id
+            WHERE v.usuario_id = ${usuarioId}
+          `
+        : await sql`
+            SELECT DISTINCT
+              v.nombre,
+              v.numero_arete
+            FROM vacas v
+            INNER JOIN vacuna_aplicada va
+              ON va.vaca_id = v.id
+          `;
+
+      if (!result.length) {
+        return await finish("sql", "No hay vacas vacunadas.", {
+          tools: toolsExecuted
+        });
+      }
+
+      const texto = result
+        .map((v: any) => `- ${v.nombre}\n(${v.numero_arete})`)
         .join("\n");
 
-    return reply({
-
-      tipo: "sql",
-
-      respuesta:
-        `Vacas vacunadas:\n${texto}`
-
-    });
-
-  }
-
-  // =====================================================
-  // LISTAR VACAS
-  // =====================================================
-
-  if (
-
-    pregunta.includes(
-      "que vacas tengo"
-    ) ||
-
-    pregunta.includes(
-      "vacas registradas"
-    ) ||
-
-    pregunta.includes(
-      "listar vacas"
-    ) ||
-
-    pregunta.includes(
-      "todas las vacas"
-    ) ||
-
-    pregunta.includes(
-      "total de vacas"
-    ) ||
-
-    pregunta.includes(
-      "que vacas hay"
-    ) ||
-
-    pregunta.includes(
-      "listame las vacas "
-    )
-
-  ) {
-
-    const result = await sql`
-
-      SELECT
-
-        nombre,
-        raza,
-        sexo,
-        numero_arete
-
-      FROM vacas
-
-    `;
-
-    if (!result.length) {
-
-      return reply({
-
-        tipo: "sql",
-
-        respuesta:
-          "No hay vacas registradas."
-
+      return await finish("sql", `Vacas vacunadas:\n${texto}`, {
+        tools: toolsExecuted
       });
-
     }
 
-    const texto =
-      result
-        .map((v: any) => {
+    // =====================================================
+    // LISTAR VACAS
+    // =====================================================
 
+    if (
+      pregunta.includes("que vacas tengo") ||
+      pregunta.includes("vacas registradas") ||
+      pregunta.includes("listar vacas") ||
+      pregunta.includes("todas las vacas") ||
+      pregunta.includes("total de vacas") ||
+      pregunta.includes("que vacas hay") ||
+      pregunta.includes("listame las vacas ")
+    ) {
+      const result = usuarioId
+        ? await sql`
+            SELECT
+              nombre,
+              raza,
+              sexo,
+              numero_arete
+            FROM vacas
+            WHERE usuario_id = ${usuarioId}
+          `
+        : await sql`
+            SELECT
+              nombre,
+              raza,
+              sexo,
+              numero_arete
+            FROM vacas
+          `;
+
+      if (!result.length) {
+        return await finish("sql", "No hay vacas registradas.", {
+          tools: toolsExecuted
+        });
+      }
+
+      const texto = result
+        .map((v: any) => {
           return `
 - ${v.nombre}
 | ${v.raza}
 | ${v.sexo}
 | ${v.numero_arete}
 `;
-
         })
         .join("\n");
 
-    return reply({
+      return await finish("sql", `Vacas registradas:\n${texto}`, {
+        tools: toolsExecuted
+      });
+    }
 
-      tipo: "sql",
+    // =====================================================
+    // FUNCTION CALLING
+    // =====================================================
 
-      respuesta:
-        `Vacas registradas:\n${texto}`
-
-    });
-
-  }
-
-  // =====================================================
-  // FUNCTION CALLING
-  // =====================================================
-
-  const functionResponse =
-    await $fetch(
-      "/api/ia/function-calling",
-      {
-        method: "POST",
-
-        body: {
-          pregunta:
-            preguntaOriginal
-        }
+    toolsExecuted.push({
+      name: "ia.function-calling",
+      status: "SUCCESS",
+      params: {
+        pregunta: preguntaOriginal
       }
-    );
-
-  if (
-    functionResponse?.encontrado
-  ) {
-
-    return reply({
-
-      tipo:
-        "function-calling",
-
-      respuesta:
-        functionResponse.respuesta,
-
-      tool:
-        functionResponse.tool,
-
-      argumentos:
-        functionResponse.argumentos,
-
-      resultado:
-        functionResponse.resultado
-
     });
 
-  }
+    try {
+      const functionResponse = await $fetch("/api/ia/function-calling", {
+        method: "POST",
+        body: {
+          pregunta: preguntaOriginal
+        }
+      });
 
-  // =====================================================
-  // SI EXISTE ANIMAL
-  // =====================================================
+      toolsExecuted[toolsExecuted.length - 1].result = functionResponse;
 
-  if (animalMatch) {
-
-    const vacaId =
-      animalMatch.id;
-
-    // =====================================================
-    // PESOS
-    // =====================================================
-
-    const pesosRows =
-      await sql`
-
-      SELECT
-        peso,
-        fecha
-
-      FROM pesos
-
-      WHERE vaca_id =
-      ${vacaId}
-
-      ORDER BY fecha DESC
-
-    `;
+      if (functionResponse?.encontrado) {
+        return await finish("function-calling", functionResponse.respuesta, {
+          tools: toolsExecuted
+        });
+      }
+    } catch (error: any) {
+      toolsExecuted[toolsExecuted.length - 1].status = "ERROR";
+      toolsExecuted[toolsExecuted.length - 1].error = String(error?.message ?? error);
+    }
 
     // =====================================================
-    // VACUNAS
+    // SI EXISTE ANIMAL
     // =====================================================
 
-    const vacunasRows =
-      await sql`
+    if (animalMatch) {
+      const vacaId = animalMatch.id;
 
-      SELECT
-
-        vc.nombre
-        AS vacuna_nombre,
-
-        va.fecha_aplicacion,
-
-        va.veterinario
-
-      FROM vacuna_aplicada va
-
-      LEFT JOIN vacunas vc
-      ON vc.id = va.vacuna_id
-
-      WHERE va.vaca_id =
-      ${vacaId}
-
-      ORDER BY
-      va.fecha_aplicacion DESC
-
-    `;
-
-    // =====================================================
-    // ENFERMEDADES
-    // =====================================================
-
-    const enfermedadesRows =
-      await sql`
-
-      SELECT
-
-        nombre,
-        tratamiento,
-        fecha,
-        veterinario
-
-      FROM enfermedades
-
-      WHERE vaca_id =
-      ${vacaId}
-
-      ORDER BY fecha DESC
-
-    `;
-
-    // =====================================================
-    // HISTORIAL
-    // =====================================================
-
-    const historialRows =
-      await sql`
-
-      SELECT
-
-        hp.fecha_inicio,
-
-        hp.fecha_fin,
-
-        d.nombre
-        AS dueno_nombre,
-
-        r.nombre
-        AS rancho_nombre
-
-      FROM historial_propiedad hp
-
-      LEFT JOIN duenos d
-      ON d.id = hp.dueno_id
-
-      LEFT JOIN ranchos r
-      ON r.id = hp.rancho_id
-
-      WHERE hp.vaca_id =
-      ${vacaId}
-
-      ORDER BY hp.fecha_inicio DESC
-
-    `;
-
-    const ultimoPeso =
-      pesosRows[0] ?? null;
-
-    const propiedadActual =
-      historialRows[0] ?? null;
-
-    // =====================================================
-    // ESTADO ACTUAL
-    // =====================================================
-
-    if (
-
-      pregunta.includes(
-        "esta activa"
-      ) ||
-
-      pregunta.includes(
-        "sigue activa"
-      ) ||
-
-      pregunta.includes(
-        "esta dada de baja"
-      ) ||
-
-      pregunta.includes(
-        "esta de baja"
-      ) ||
-
-      pregunta.includes(
-        "ya se vendio"
-      ) ||
-
-      pregunta.includes(
-        "ya fue vendida"
-      ) ||
-
-      pregunta.includes(
-        "fue vendida"
-      ) ||
-
-      pregunta.includes(
-        "esta vendida"
-      ) ||
-
-      pregunta.includes(
-        "se vendio"
-      ) ||
-
-      pregunta.includes(
-        "vendida"
-      ) ||
-
-      pregunta.includes(
-        "vendido"
-      )
-
-    ) {
-
-      const ventaRows =
-        await sql`
-
-        SELECT *
-
-        FROM ventas
-
-        WHERE vaca_id =
-        ${vacaId}
-
+      const pesosRows = await sql`
+        SELECT peso, fecha
+        FROM pesos
+        WHERE vaca_id = ${vacaId}
         ORDER BY fecha DESC
-
-        LIMIT 1
-
       `;
 
-      const venta =
-        ventaRows[0] ?? null;
+      const vacunasRows = await sql`
+        SELECT
+          vc.nombre AS vacuna_nombre,
+          va.fecha_aplicacion,
+          va.veterinario
+        FROM vacuna_aplicada va
+        LEFT JOIN vacunas vc
+          ON vc.id = va.vacuna_id
+        WHERE va.vaca_id = ${vacaId}
+        ORDER BY va.fecha_aplicacion DESC
+      `;
 
-      if (venta) {
+      const enfermedadesRows = await sql`
+        SELECT
+          nombre,
+          tratamiento,
+          fecha,
+          veterinario
+        FROM enfermedades
+        WHERE vaca_id = ${vacaId}
+        ORDER BY fecha DESC
+      `;
 
-        return reply({
+      const historialRows = await sql`
+        SELECT
+          hp.fecha_inicio,
+          hp.fecha_fin,
+          d.nombre AS dueno_nombre,
+          r.nombre AS rancho_nombre
+        FROM historial_propiedad hp
+        LEFT JOIN duenos d
+          ON d.id = hp.dueno_id
+        LEFT JOIN ranchos r
+          ON r.id = hp.rancho_id
+        WHERE hp.vaca_id = ${vacaId}
+        ORDER BY hp.fecha_inicio DESC
+      `;
 
-          tipo: "sql",
+      const ultimoPeso = pesosRows[0] ?? null;
+      const propiedadActual = historialRows[0] ?? null;
 
-          respuesta:
-`
+      if (
+        pregunta.includes("esta activa") ||
+        pregunta.includes("sigue activa") ||
+        pregunta.includes("esta dada de baja") ||
+        pregunta.includes("esta de baja") ||
+        pregunta.includes("ya se vendio") ||
+        pregunta.includes("ya fue vendida") ||
+        pregunta.includes("fue vendida") ||
+        pregunta.includes("esta vendida") ||
+        pregunta.includes("se vendio") ||
+        pregunta.includes("vendida") ||
+        pregunta.includes("vendido")
+      ) {
+        const ventaRows = await sql`
+          SELECT *
+          FROM ventas
+          WHERE vaca_id = ${vacaId}
+          ORDER BY fecha DESC
+          LIMIT 1
+        `;
+
+        const venta = ventaRows[0] ?? null;
+
+        if (venta) {
+          return await finish(
+            "sql",
+            `
 ${animalMatch.nombre}
 ya fue vendida.
 
@@ -1136,365 +1091,161 @@ $${venta.precio}
 
 Fecha:
 ${venta.fecha}
+`,
+            { tools: toolsExecuted }
+          );
+        }
 
-`
+        const estado = animalMatch.estado ?? "activa";
 
-        });
+        if (estado.toLowerCase() === "baja") {
+          return await finish(
+            "sql",
+            `${animalMatch.nombre} está dada de baja.`,
+            { tools: toolsExecuted }
+          );
+        }
 
-      }
-
-      const estado =
-        animalMatch.estado
-        ?? "activa";
-
-      if (
-        estado.toLowerCase()
-        === "baja"
-      ) {
-
-        return reply({
-
-          tipo: "sql",
-
-          respuesta:
-`${animalMatch.nombre} está dada de baja.`
-
-        });
-
-      }
-
-      return reply({
-
-        tipo: "sql",
-
-        respuesta:
-`${animalMatch.nombre} sigue activa.`
-
-      });
-
-    }
-
-    // =====================================================
-    // EDAD
-    // =====================================================
-
-    if (
-
-      pregunta.includes(
-        "edad"
-      ) ||
-
-      pregunta.includes(
-        "años"
-      )
-
-    ) {
-
-      const nacimiento =
-        new Date(
-          animalMatch.fecha_nacimiento
+        return await finish(
+          "sql",
+          `${animalMatch.nombre} sigue activa.`,
+          { tools: toolsExecuted }
         );
-
-      const hoy =
-        new Date();
-
-      const edad =
-        hoy.getFullYear() -
-        nacimiento.getFullYear();
-
-      return reply({
-
-        tipo: "sql",
-
-        respuesta:
-          `${animalMatch.nombre} tiene aproximadamente ${edad} años.`
-
-      });
-
-    }
-
-    // =====================================================
-    // PESO
-    // =====================================================
-
-    if (
-
-      pregunta.includes(
-        "peso"
-      ) ||
-
-      pregunta.includes(
-        "pesa"
-      )
-
-    ) {
-
-      if (!ultimoPeso) {
-
-        return reply({
-
-          tipo: "sql",
-
-          respuesta:
-            `No hay pesos registrados para ${animalMatch.nombre}.`
-
-        });
-
       }
 
-      return reply({
+      if (pregunta.includes("edad") || pregunta.includes("años")) {
+        const nacimiento = new Date(animalMatch.fecha_nacimiento);
+        const hoy = new Date();
+        const edad = hoy.getFullYear() - nacimiento.getFullYear();
 
-        tipo: "sql",
-
-        respuesta:
-          `${animalMatch.nombre} pesa ${ultimoPeso.peso} kg.`
-
-      });
-
-    }
-
-    // =====================================================
-    // VETERINARIO
-    // =====================================================
-
-    if (
-
-      pregunta.includes(
-        "veterinario"
-      )
-
-    ) {
-
-      if (
-        vacunasRows.length
-      ) {
-
-        const ultima =
-          vacunasRows[0];
-
-        return reply({
-
-          tipo: "sql",
-
-          respuesta:
-            `El veterinario más reciente de ${animalMatch.nombre} fue ${ultima.veterinario}.`
-
-        });
-
+        return await finish(
+          "sql",
+          `${animalMatch.nombre} tiene aproximadamente ${edad} años.`,
+          { tools: toolsExecuted }
+        );
       }
 
-      if (
-        enfermedadesRows.length
-      ) {
+      if (pregunta.includes("peso") || pregunta.includes("pesa")) {
+        if (!ultimoPeso) {
+          return await finish(
+            "sql",
+            `No hay pesos registrados para ${animalMatch.nombre}.`,
+            { tools: toolsExecuted }
+          );
+        }
 
-        const ultima =
-          enfermedadesRows[0];
-
-        return reply({
-
-          tipo: "sql",
-
-          respuesta:
-            `El veterinario de ${animalMatch.nombre} fue ${ultima.veterinario}.`
-
-        });
-
+        return await finish(
+          "sql",
+          `${animalMatch.nombre} pesa ${ultimoPeso.peso} kg.`,
+          { tools: toolsExecuted }
+        );
       }
 
-      return reply({
+      if (pregunta.includes("veterinario")) {
+        if (vacunasRows.length) {
+          const ultima = vacunasRows[0];
 
-        tipo: "sql",
+          return await finish(
+            "sql",
+            `El veterinario más reciente de ${animalMatch.nombre} fue ${ultima.veterinario}.`,
+            { tools: toolsExecuted }
+          );
+        }
 
-        respuesta:
-          `No hay veterinarios registrados para ${animalMatch.nombre}.`
+        if (enfermedadesRows.length) {
+          const ultima = enfermedadesRows[0];
 
-      });
+          return await finish(
+            "sql",
+            `El veterinario de ${animalMatch.nombre} fue ${ultima.veterinario}.`,
+            { tools: toolsExecuted }
+          );
+        }
 
-    }
-
-    // =====================================================
-    // TRATAMIENTO
-    // =====================================================
-
-    if (
-
-      pregunta.includes(
-        "tratamiento"
-      )
-
-    ) {
-
-      if (
-        !enfermedadesRows.length
-      ) {
-
-        return reply({
-
-          tipo: "sql",
-
-          respuesta:
-            `${animalMatch.nombre} no tiene tratamientos registrados.`
-
-        });
-
+        return await finish(
+          "sql",
+          `No hay veterinarios registrados para ${animalMatch.nombre}.`,
+          { tools: toolsExecuted }
+        );
       }
 
-      const ultima =
-        enfermedadesRows[0];
+      if (pregunta.includes("tratamiento")) {
+        if (!enfermedadesRows.length) {
+          return await finish(
+            "sql",
+            `${animalMatch.nombre} no tiene tratamientos registrados.`,
+            { tools: toolsExecuted }
+          );
+        }
 
-      return reply({
+        const ultima = enfermedadesRows[0];
 
-        tipo: "sql",
-
-        respuesta:
-          `El tratamiento de ${animalMatch.nombre} fue: ${ultima.tratamiento}.`
-
-      });
-
-    }
-
-    // =====================================================
-    // ENFERMEDADES
-    // =====================================================
-
-    if (
-
-      pregunta.includes(
-        "enfermedad"
-      ) ||
-
-      pregunta.includes(
-        "enfermedades"
-      )
-
-    ) {
-
-      if (
-        !enfermedadesRows.length
-      ) {
-
-        return reply({
-
-          tipo: "sql",
-
-          respuesta:
-            `${animalMatch.nombre} no tiene enfermedades registradas.`
-
-        });
-
+        return await finish(
+          "sql",
+          `El tratamiento de ${animalMatch.nombre} fue: ${ultima.tratamiento}.`,
+          { tools: toolsExecuted }
+        );
       }
 
-      const texto =
-        enfermedadesRows
-          .map((e: any) => {
+      if (pregunta.includes("enfermedad") || pregunta.includes("enfermedades")) {
+        if (!enfermedadesRows.length) {
+          return await finish(
+            "sql",
+            `${animalMatch.nombre} no tiene enfermedades registradas.`,
+            { tools: toolsExecuted }
+          );
+        }
 
-            return `
-- ${e.nombre}
-(${e.fecha})
-`;
-
-          })
+        const texto = enfermedadesRows
+          .map((e: any) => `- ${e.nombre}\n(${e.fecha})`)
           .join("\n");
 
-      return reply({
-
-        tipo: "sql",
-
-        respuesta:
-          `Enfermedades de ${animalMatch.nombre}:\n${texto}`
-
-      });
-
-    }
-
-    // =====================================================
-    // VACUNAS
-    // =====================================================
-
-    if (
-
-      pregunta.includes(
-        "vacuna"
-      ) ||
-
-      pregunta.includes(
-        "vacunas"
-      )
-
-    ) {
-
-      if (
-        !vacunasRows.length
-      ) {
-
-        return reply({
-
-          tipo: "sql",
-
-          respuesta:
-            `${animalMatch.nombre} no tiene vacunas registradas.`
-
-        });
-
+        return await finish(
+          "sql",
+          `Enfermedades de ${animalMatch.nombre}:\n${texto}`,
+          { tools: toolsExecuted }
+        );
       }
 
-      const texto =
-        vacunasRows
-          .map((v: any) => {
+      if (pregunta.includes("vacuna") || pregunta.includes("vacunas")) {
+        if (!vacunasRows.length) {
+          return await finish(
+            "sql",
+            `${animalMatch.nombre} no tiene vacunas registradas.`,
+            { tools: toolsExecuted }
+          );
+        }
 
-            return `
+        const texto = vacunasRows
+          .map(
+            (v: any) => `
 - ${v.vacuna_nombre}
 (${v.fecha_aplicacion})
 Veterinario:
 ${v.veterinario}
-`;
-
-          })
+`
+          )
           .join("\n");
 
-      return reply({
-
-        tipo: "sql",
-
-        respuesta:
-          `Vacunas de ${animalMatch.nombre}:\n${texto}`
-
-      });
-
-    }
-
-    // =====================================================
-    // HISTORIAL
-    // =====================================================
-
-    if (
-
-      pregunta.includes(
-        "historial"
-      )
-
-    ) {
-
-      if (
-        !historialRows.length
-      ) {
-
-        return reply({
-
-          tipo: "sql",
-
-          respuesta:
-            `${animalMatch.nombre} no tiene historial.`
-
-        });
-
+        return await finish(
+          "sql",
+          `Vacunas de ${animalMatch.nombre}:\n${texto}`,
+          { tools: toolsExecuted }
+        );
       }
 
-      const texto =
-        historialRows
-          .map((h: any) => {
+      if (pregunta.includes("historial")) {
+        if (!historialRows.length) {
+          return await finish(
+            "sql",
+            `${animalMatch.nombre} no tiene historial.`,
+            { tools: toolsExecuted }
+          );
+        }
 
-            return `
+        const texto = historialRows
+          .map(
+            (h: any) => `
 Dueño:
 ${h.dueno_nombre}
 
@@ -1506,32 +1257,18 @@ ${h.fecha_inicio}
 
 Hasta:
 ${h.fecha_fin ?? "Actual"}
-`;
-
-          })
+`
+          )
           .join("\n");
 
-      return reply({
+        return await finish(
+          "sql",
+          `Historial de ${animalMatch.nombre}:\n${texto}`,
+          { tools: toolsExecuted }
+        );
+      }
 
-        tipo: "sql",
-
-        respuesta:
-          `Historial de ${animalMatch.nombre}:\n${texto}`
-
-      });
-
-    }
-
-    // =====================================================
-    // RESUMEN GENERAL
-    // =====================================================
-
-    return reply({
-
-      tipo: "sql",
-
-      respuesta:
-`
+      const resumen = `
 Nombre:
 ${animalMatch.nombre}
 
@@ -1554,55 +1291,184 @@ Rancho actual:
 ${propiedadActual?.rancho_nombre ?? "Sin rancho"}
 
 Último peso:
-${ultimoPeso
-  ? `${ultimoPeso.peso} kg`
-  : "Sin peso"}
+${ultimoPeso ? `${ultimoPeso.peso} kg` : "Sin peso"}
 
 Vacunas registradas:
 ${vacunasRows.length}
 
 Enfermedades registradas:
 ${enfermedadesRows.length}
+`;
 
-`
+      return await finish("sql", resumen, { tools: toolsExecuted });
+    }
 
+    // =====================================================
+    // FALLBACK RAG (STREAMING O NORMAL)
+    // =====================================================
+
+    sseWrite({ estado: "Pensando..." });
+
+    const memoriaRows = usuarioId
+      ? await sql`
+          SELECT contenido
+          FROM memories
+          WHERE usuario_id = ${usuarioId}
+          ORDER BY updated_at DESC, id DESC
+          LIMIT 20
+        `
+      : [];
+
+    const contextoMemorias = memoriaRows.length
+      ? memoriaRows.map((m: any) => m.contenido).join("\n")
+      : "";
+
+    const contextoGanaderoRows = usuarioId
+      ? await sql`
+          SELECT contenido
+          FROM semantic_contexts sc
+          INNER JOIN vacas v
+            ON v.id = sc.vaca_id
+          WHERE v.usuario_id = ${usuarioId}
+          ORDER BY sc.updated_at DESC, sc.id DESC
+          LIMIT 3
+        `
+      : await sql`
+          SELECT contenido
+          FROM semantic_contexts
+          ORDER BY updated_at DESC, id DESC
+          LIMIT 3
+        `;
+
+    const contextoGanadero = contextoGanaderoRows.length
+      ? contextoGanaderoRows.map((r: any) => r.contenido).join("\n")
+      : "";
+
+    const ragMessages = buildRagMessages({
+      preguntaOriginal,
+      contextoMemorias,
+      contextoGanadero,
+      historial
     });
 
-  }
+    if (wantsStream) {
+      let finalText = "";
+      let firstTokenAt: number | null = null;
 
-  // =====================================================
-  // FALLBACK RAG
-  // =====================================================
+      const stream = await ollama.chat({
+        model: "llama3.2:latest",
+        stream: true,
+        options: {
+          temperature: 0,
+          top_p: 0.1
+        },
+        messages: ragMessages
+      });
 
-  const ragResponse =
-    await $fetch(
-      "/api/ia/chat",
-      {
-        method: "POST",
+      for await (const chunk of stream as any) {
+        const token = chunk.message?.content ?? "";
+        if (!token) continue;
 
-        body: {
-
-          pregunta:
-            preguntaOriginal,
-
-          conversation_id:
-            conversationId,
-
-          usuario_id:
-            usuarioId
-
+        if (firstTokenAt === null) {
+          firstTokenAt = Date.now();
+          const ttftMs = firstTokenAt - requestStart;
+          sseWrite({ estado: "Recibiendo respuesta..." });
+          toolsExecuted.push({
+            name: "ollama.chat",
+            status: "SUCCESS",
+            params: {
+              model: "llama3.2:latest",
+              stream: true
+            },
+            result: { ttft_ms: ttftMs }
+          });
         }
 
+        finalText += token;
+        sseWrite({ token });
       }
-    );
 
-  return reply({
+      const ttftMs = firstTokenAt ? firstTokenAt - requestStart : null;
 
-    tipo: "rag",
+      return await finish("rag", finalText.trim() || "No encontré información relacionada en el sistema.", {
+        ttftMs,
+        alreadyStreamed: true,
+        tools: toolsExecuted
+      });
+    }
 
-    respuesta:
-      ragResponse.respuesta
+    const response = await ollama.chat({
+      model: "llama3.2:latest",
+      stream: false,
+      options: {
+        temperature: 0,
+        top_p: 0.1
+      },
+      messages: ragMessages
+    });
 
-  });
+    const respuestaFinal =
+      response.message?.content?.trim() ||
+      "No encontré información relacionada en el sistema.";
 
+    toolsExecuted.push({
+      name: "ollama.chat",
+      status: "SUCCESS",
+      params: {
+        model: "llama3.2:latest",
+        stream: false
+      },
+      result: {
+        response: respuestaFinal
+      }
+    });
+
+    return await finish("rag", respuestaFinal, {
+      ttftMs: null,
+      tools: toolsExecuted
+    });
+  } catch (error: any) {
+    const errorText = `Error interno en el router: ${String(
+      error?.message ?? error
+    )}`;
+
+    try {
+      await logAi({
+        responseText: errorText,
+        ttftMs: null,
+        wasBlocked: false,
+        toolsExecuted: [
+          ...toolsExecuted,
+          {
+            name: "router.error",
+            status: "ERROR",
+            error: String(error?.message ?? error)
+          }
+        ]
+      });
+    } catch {
+      // no-op
+    }
+
+    if (conversationId) {
+      try {
+        await insertConversationMessage("assistant", errorText);
+      } catch {
+        // no-op
+      }
+    }
+
+    if (wantsStream) {
+      sseWrite({ estado: "Error consultando IA." });
+      sseWrite({ token: "Error consultando IA." });
+      sseWrite("done", "end");
+      event.node.res.end();
+      return;
+    }
+
+    return {
+      tipo: "error",
+      respuesta: "Error consultando IA."
+    };
+  }
 });

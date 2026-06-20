@@ -6,13 +6,42 @@ const sql = postgres(
 );
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event);
 
-  const result = await sql`
-    INSERT INTO vacunas (nombre, descripcion)
-    VALUES (${body.nombre}, ${body.descripcion})
-    RETURNING *
-  `;
+  const body =
+    await readBody(event);
+
+  if (!body.usuario_id) {
+
+    throw createError({
+      statusCode: 400,
+      statusMessage: "usuario_id requerido"
+    });
+
+  }
+
+  const result =
+    await sql`
+
+      INSERT INTO vacunas (
+
+        nombre,
+        descripcion,
+        usuario_id
+
+      )
+
+      VALUES (
+
+        ${body.nombre},
+        ${body.descripcion},
+        ${body.usuario_id}
+
+      )
+
+      RETURNING *
+
+    `;
 
   return result[0];
+
 });

@@ -3,7 +3,24 @@ definePageMeta({
   middleware: ["auth"]
 })
 const search = ref("")
-const { data: vacunas, refresh } = await useFetch("/api/vacunas")
+const usuario =
+  useState<any>(
+    "usuario",
+    () => null
+  );
+
+const {
+  data: vacunas,
+  refresh
+} = await useFetch(
+  "/api/vacunas",
+  {
+    query: {
+      usuario_id:
+        usuario.value?.id
+    }
+  }
+);
 
 const filtered = computed(() => {
   const list = vacunas.value ?? []
@@ -71,7 +88,7 @@ async function eliminarVacuna(id: number) {
                 </NuxtLink>
 
                 <NuxtLink
-                  :to="`/vacunas/${vacuna.id}/edit`"
+                  :to="`/vacunas/${vacuna.id}`"
                   class="px-3 py-2 rounded-xl text-sm bg-black text-white"
                 >
                   Editar

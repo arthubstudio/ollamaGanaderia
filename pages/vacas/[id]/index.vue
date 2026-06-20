@@ -1,19 +1,78 @@
 <script setup lang="ts">
+definePageMeta({
+  middleware: ["auth"]
+});
+
 const route = useRoute();
 const vacaId = Number(route.params.id);
 
-const { data: vaca } = await useFetch(`/api/vacas/${vacaId}`);
-const { data: pesos } = await useFetch("/api/pesos");
-const { data: vacunasAplicadas } = await useFetch("/api/vacunas-aplicadas");
-const { data: vacunas } = await useFetch("/api/vacunas");
-const { data: enfermedades } = await useFetch("/api/enfermedades");
-const { data: historial } = await useFetch("/api/historial-propiedad");
-const { data: duenos } = await useFetch("/api/duenos");
-const { data: ranchos } = await useFetch("/api/ranchos");
+const usuario = useState<any>("usuario", () => null);
 
-const pesosVaca = computed(() => (pesos.value ?? []).filter((p: any) => p.vaca_id == vacaId));
-const vacunasVaca = computed(() => (vacunasAplicadas.value ?? []).filter((v: any) => v.vaca_id == vacaId));
-const enfermedadesVaca = computed(() => (enfermedades.value ?? []).filter((e: any) => e.vaca_id == vacaId));
+const { data: vaca } = await useFetch(`/api/vacas/${vacaId}`, {
+  query: {
+    usuario_id: usuario.value?.id
+  }
+});
+
+const { data: pesos } = await useFetch("/api/pesos", {
+  query: {
+    vaca_id: vacaId,
+    usuario_id: usuario.value?.id
+  }
+});
+
+const { data: vacunasAplicadas } = await useFetch("/api/vacunas-aplicadas", {
+  query: {
+    vaca_id: vacaId,
+    usuario_id: usuario.value?.id
+  }
+});
+
+const { data: vacunas } = await useFetch("/api/vacunas", {
+  query: {
+    usuario_id: usuario.value?.id
+  }
+});
+
+const { data: enfermedades } = await useFetch("/api/enfermedades", {
+  query: {
+    vaca_id: vacaId,
+    usuario_id: usuario.value?.id
+  }
+});
+
+const { data: historial } = await useFetch("/api/historial-propiedad", {
+  query: {
+    vaca_id: vacaId,
+    usuario_id: usuario.value?.id
+  }
+});
+
+const { data: duenos } = await useFetch("/api/duenos", {
+  query: {
+    usuario_id: usuario.value?.id
+  }
+});
+
+const { data: ranchos } = await useFetch("/api/ranchos", {
+  query: {
+    usuario_id: usuario.value?.id
+  }
+});
+
+const pesosVaca = computed(() =>
+  (pesos.value ?? []).filter((p: any) => p.vaca_id == vacaId)
+);
+
+const vacunasVaca = computed(() =>
+  (vacunasAplicadas.value ?? []).filter((v: any) => v.vaca_id == vacaId)
+);
+
+const enfermedadesVaca = computed(() =>
+  (enfermedades.value ?? []).filter((e: any) => e.vaca_id == vacaId)
+);
+
+const tienePeso = computed(() => (pesos.value?.length ?? 0) > 0);
 
 const propiedadActual = computed(() => {
   const lista = historial.value ?? [];
@@ -31,7 +90,7 @@ const ranchoActual = computed(() => {
 });
 
 const vacunaNombre = (id: number) => {
-  const item = (vacunas.value ?? []).find((v: any) => v.id === id);
+  const item = (vacunas.value ?? []).find((v: any) => Number(v.id) === Number(id));
   return item?.nombre ?? `Vacuna ${id}`;
 };
 
@@ -39,7 +98,13 @@ async function eliminarVaca() {
   const ok = confirm("¿Eliminar esta vaca?");
   if (!ok) return;
 
-  await $fetch(`/api/vacas/${vacaId}`, { method: "DELETE" });
+  await $fetch(`/api/vacas/${vacaId}`, {
+    method: "DELETE",
+    query: {
+      usuario_id: usuario.value?.id
+    }
+  });
+
   await navigateTo("/vacas");
 }
 
@@ -55,6 +120,8 @@ Información sobre la vaca ${vaca.value?.nombre ?? ""}
 
 ${pregunta.value}
 `,
+      conversation_id: null,
+      usuario_id: usuario.value?.id
     },
   });
 
@@ -100,44 +167,25 @@ ${pregunta.value}
 
       <div class="bg-white rounded-3xl p-6 border border-gray-100">
         <p class="text-gray-500">Dueño</p>
-        <h2 class="text-2xl font-bold mt-2">{{ duenoActual?.nombre || "Sin dueño" }}</h2>
+        <h2 class="text-2xl font-bold mt-2">
+          {{ duenoActual?.nombre || "Sin dueño" }}
+        </h2>
       </div>
 
       <div class="bg-white rounded-3xl p-6 border border-gray-100">
         <p class="text-gray-500">Rancho</p>
-        <h2 class="text-2xl font-bold mt-2">{{ ranchoActual?.nombre || "Sin rancho" }}</h2>
+        <h2 class="text-2xl font-bold mt-2">
+          {{ ranchoActual?.nombre || "Sin rancho" }}
+        </h2>
       </div>
     </div>
 
     <div class="flex flex-wrap gap-4 mb-10">
       <NuxtLink
-
-        :to="
-
-      pesos?.length
-        ? `/vacas/${vaca.id}/pesos/edit`
-        : `/vacas/${vaca.id}/pesos/create`
-
-        "
-
-        class="
-          bg-black
-          text-white
-          px-5
-          py-3
-          rounded-2xl
-        "
-
+        :to="tienePeso ? `/vacas/${vaca.id}/pesos/edit` : `/vacas/${vaca.id}/pesos/create`"
+        class="bg-black text-white px-5 py-3 rounded-2xl"
       >
-
-        {{
-
-          pesos?.length
-            ? "Actualizar Peso"
-            : "Agregar Peso"
-
-        }}
-
+        {{ tienePeso ? "Actualizar Peso" : "Agregar Peso" }}
       </NuxtLink>
 
       <NuxtLink
@@ -166,7 +214,11 @@ ${pregunta.value}
       <div class="bg-white rounded-3xl p-8 border border-gray-100">
         <h2 class="text-3xl font-bold mb-6">Peso</h2>
         <div class="space-y-4">
-          <div v-for="peso in pesosVaca" :key="peso.id" class="border border-gray-100 rounded-2xl p-4">
+          <div
+            v-for="peso in pesosVaca"
+            :key="peso.id"
+            class="border border-gray-100 rounded-2xl p-4"
+          >
             <p class="font-semibold">{{ peso.peso }} kg</p>
             <p class="text-gray-500 text-sm">{{ peso.fecha }}</p>
           </div>
@@ -176,8 +228,14 @@ ${pregunta.value}
       <div class="bg-white rounded-3xl p-8 border border-gray-100">
         <h2 class="text-3xl font-bold mb-6">Vacunas</h2>
         <div class="space-y-4">
-          <div v-for="v in vacunasVaca" :key="v.id" class="border border-gray-100 rounded-2xl p-4">
-            <p class="font-semibold">{{ vacunaNombre(v.vacuna_id) }}</p>
+          <div
+            v-for="v in vacunasVaca"
+            :key="v.id"
+            class="border border-gray-100 rounded-2xl p-4"
+          >
+            <p class="font-semibold">
+              {{ v.vacuna_nombre || vacunaNombre(v.vacuna_id) }}
+            </p>
             <p class="text-gray-500 text-sm">{{ v.fecha_aplicacion }}</p>
             <p class="text-gray-500 text-sm">{{ v.veterinario }}</p>
           </div>
@@ -187,7 +245,11 @@ ${pregunta.value}
       <div class="bg-white rounded-3xl p-8 border border-gray-100">
         <h2 class="text-3xl font-bold mb-6">Enfermedades</h2>
         <div class="space-y-4">
-          <div v-for="e in enfermedadesVaca" :key="e.id" class="border border-gray-100 rounded-2xl p-4">
+          <div
+            v-for="e in enfermedadesVaca"
+            :key="e.id"
+            class="border border-gray-100 rounded-2xl p-4"
+          >
             <p class="font-semibold">{{ e.nombre }}</p>
             <p class="text-gray-500 text-sm">{{ e.fecha }}</p>
             <p class="text-gray-500 text-sm">{{ e.veterinario }}</p>

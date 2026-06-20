@@ -5,10 +5,27 @@ const sql = postgres(
   { prepare: false }
 );
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+
+  const query =
+    getQuery(event);
+
+  const usuarioId =
+    Number(query.usuario_id);
+
+  if (!usuarioId) {
+    return [];
+  }
+
   return await sql`
+
     SELECT *
     FROM vacunas
+
+    WHERE usuario_id =
+      ${usuarioId}
+
     ORDER BY nombre ASC
+
   `;
 });

@@ -71,11 +71,32 @@ async function eliminarDueno(id: number) {
             <td class="p-5">{{ dueno.telefono }}</td>
             <td class="p-5">{{ dueno.direccion }}</td>
             <td class="p-5">
-              <RowActions
-                :view-to="`/duenos/${dueno.id}`"
-                :edit-to="`/duenos/${dueno.id}/edit`"
-                :delete-action="() => eliminarDueno(dueno.id)"
-              />
+
+              <div class="flex gap-2">
+
+                <NuxtLink
+                  :to="`/duenos/${dueno.id}`"
+                  class="px-3 py-2 rounded-xl text-sm bg-gray-100 hover:bg-gray-200"
+                >
+                  Ver
+                </NuxtLink>
+
+                <NuxtLink
+                  :to="`/duenos/${dueno.id}/edit`"
+                  class="px-3 py-2 rounded-xl text-sm bg-black text-white"
+                >
+                  Editar
+                </NuxtLink>
+
+                <button
+                  @click="eliminarDueno(dueno.id)"
+                  class="px-3 py-2 rounded-xl text-sm bg-red-600 text-white"
+                >
+                  Eliminar
+                </button>
+
+              </div>
+
             </td>
           </tr>
         </tbody>

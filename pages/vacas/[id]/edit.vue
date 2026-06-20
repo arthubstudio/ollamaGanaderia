@@ -1,8 +1,18 @@
 <script setup lang="ts">
+definePageMeta({
+  middleware: ["auth"]
+});
+
+const usuario = useState<any>("usuario", () => null);
+
 const route = useRoute();
 const vacaId = Number(route.params.id);
 
-const { data: vaca } = await useFetch(`/api/vacas/${vacaId}`);
+const { data: vaca } = await useFetch(`/api/vacas/${vacaId}`, {
+  query: {
+    usuario_id: usuario.value?.id
+  }
+});
 
 const form = reactive({
   numero_arete: "",
@@ -25,9 +35,17 @@ watchEffect(() => {
 });
 
 async function guardar() {
+  if (!usuario.value?.id) {
+    alert("Debes iniciar sesión.");
+    return;
+  }
+
   await $fetch(`/api/vacas/${vacaId}`, {
     method: "PUT",
-    body: form,
+    body: {
+      ...form,
+      usuario_id: usuario.value.id
+    },
   });
 
   await navigateTo(`/vacas/${vacaId}`);

@@ -1,5 +1,5 @@
 import { db } from "~/lib/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import {
   vacas,
   pesos,
@@ -12,6 +12,32 @@ import {
 
 export default defineEventHandler(async (event) => {
   const id = Number(event.context.params?.id);
+  const query = getQuery(event);
+  const usuarioId = Number(query.usuario_id);
+
+  if (!id || !usuarioId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Faltan datos para eliminar"
+    });
+  }
+
+  const vaca = await db
+    .select()
+    .from(vacas)
+    .where(
+      and(
+        eq(vacas.id, id),
+        eq(vacas.usuario_id, usuarioId)
+      )
+    );
+
+  if (!vaca.length) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Vaca no encontrada"
+    });
+  }
 
   await db.transaction(async (tx) => {
     await tx.delete(semanticContexts).where(eq(semanticContexts.vaca_id, id));

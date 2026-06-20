@@ -87,6 +87,13 @@ function cerrarSesion() {
           IA Ganadera
         </NuxtLink>
 
+        <NuxtLink
+          to="/observabilidad"
+          class="block px-4 py-3 rounded-xl hover:bg-gray-100 transition"
+        >
+          Observabilidad
+        </NuxtLink>
+
       </nav>
 
 

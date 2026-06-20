@@ -4,13 +4,36 @@ const form = reactive({
   descripcion: "",
 })
 
-async function guardar() {
-  await $fetch("/api/vacunas", {
-    method: "POST",
-    body: form,
-  })
+const usuario =
+  useState<any>(
+    "usuario",
+    () => null
+  );
 
-  await navigateTo("/vacunas")
+async function guardar() {
+
+  await $fetch(
+    "/api/vacunas",
+    {
+      method: "POST",
+
+      body: {
+
+        nombre:
+          form.nombre,
+
+        descripcion:
+          form.descripcion,
+
+        usuario_id:
+          usuario.value?.id
+
+      }
+
+    }
+  );
+
+  await navigateTo("/vacunas");
 }
 </script>
 

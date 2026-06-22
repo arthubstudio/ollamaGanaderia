@@ -8,27 +8,24 @@ const sql = postgres(
 );
 
 export async function getVacunas(
-  nombre: string
+  nombre: string,
+  usuarioId?: number | null
 ) {
+  if (!usuarioId) return [];
 
   return await sql`
-
     SELECT
-
-      vc.nombre,
+      vc.nombre AS vacuna_nombre,
       va.fecha_aplicacion,
-      va.veterinario
-
+      va.veterinario,
+      va.observaciones
     FROM vacuna_aplicada va
-
     INNER JOIN vacunas vc
       ON vc.id = va.vacuna_id
-
     INNER JOIN vacas v
       ON v.id = va.vaca_id
-
-    WHERE LOWER(v.nombre)
-    = LOWER(${nombre})
-
+    WHERE LOWER(v.nombre) = LOWER(${nombre})
+      AND v.usuario_id = ${usuarioId}
+    ORDER BY va.fecha_aplicacion DESC, va.id DESC
   `;
 }

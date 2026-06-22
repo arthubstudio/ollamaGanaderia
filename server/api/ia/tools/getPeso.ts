@@ -7,31 +7,23 @@ const sql = postgres(
   }
 );
 
-/**
- * Obtiene el último peso registrado de una vaca.
- */
 export async function getPeso(
-  nombre: string
+  nombre: string,
+  usuarioId?: number | null
 ) {
+  if (!usuarioId) return null;
 
   const rows = await sql`
-
     SELECT
-
-      p.peso
-
+      p.peso,
+      p.fecha
     FROM vacas v
-
     INNER JOIN pesos p
       ON p.vaca_id = v.id
-
-    WHERE LOWER(v.nombre)
-    = LOWER(${nombre})
-
-    ORDER BY p.fecha DESC
-
+    WHERE LOWER(v.nombre) = LOWER(${nombre})
+      AND v.usuario_id = ${usuarioId}
+    ORDER BY p.fecha DESC, p.id DESC
     LIMIT 1
-
   `;
 
   return rows[0] ?? null;

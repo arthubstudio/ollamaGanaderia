@@ -129,14 +129,13 @@ function buildRespuesta(toolName: string, args: AnyObject, resultado: any): stri
     }
 
     case "getResumen": {
-      if (!resultado) return `No encontré información de ${nombre}.`;
+      if (!resultado) return `No encontré esa vaca en tu cuenta.`;
 
       return `Nombre: ${resultado.nombre ?? nombre}
 Arete: ${resultado.numero_arete ?? "N/D"}
 Raza: ${resultado.raza ?? "N/D"}
 Sexo: ${resultado.sexo ?? "N/D"}
-Estado: ${resultado.estado ?? "N/D"}
-`;
+Estado: ${resultado.estado ?? "N/D"}`.trim();
     }
 
     default:
@@ -144,9 +143,90 @@ Estado: ${resultado.estado ?? "N/D"}
   }
 }
 
+function buildToolSchemas() {
+  const common = {
+    type: "object",
+    properties: {
+      nombre: { type: "string" }
+    },
+    required: ["nombre"]
+  } as const;
+
+  return [
+    {
+      type: "function",
+      function: {
+        name: "getPeso",
+        description: "Obtiene el último peso de una vaca",
+        parameters: common
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "getEstado",
+        description: "Obtiene el estado actual de una vaca",
+        parameters: common
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "getEdad",
+        description: "Obtiene la fecha de nacimiento de una vaca",
+        parameters: common
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "getVacunas",
+        description: "Obtiene las vacunas aplicadas a una vaca",
+        parameters: common
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "getEnfermedades",
+        description: "Obtiene enfermedades registradas de una vaca",
+        parameters: common
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "getHistorial",
+        description: "Obtiene historial de propiedad de una vaca",
+        parameters: common
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "getVenta",
+        description: "Obtiene información de venta de una vaca",
+        parameters: common
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "getResumen",
+        description: "Obtiene información completa de una vaca",
+        parameters: common
+      }
+    }
+  ] as const;
+}
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
+
   const pregunta = String(body?.pregunta ?? "").trim();
+
+  const conversationId = body?.conversation_id ? String(body.conversation_id) : null;
+  const usuarioId = body?.usuario_id ? Number(body.usuario_id) : null;
 
   if (!pregunta) {
     return {
@@ -165,131 +245,18 @@ export default defineEventHandler(async (event) => {
         role: "system",
         content: `
 Eres un asistente ganadero.
-
 Debes usar herramientas cuando necesites consultar información exacta de la base de datos.
 No inventes datos.
 Si la pregunta es sobre una vaca, intenta usar la herramienta más adecuada.
-`
+Si no encuentras la vaca en la cuenta del usuario, responde que no la encontraste en su cuenta.
+`.trim()
       },
       {
         role: "user",
         content: pregunta
       }
     ],
-    tools: [
-      {
-        type: "function",
-        function: {
-          name: "getPeso",
-          description: "Obtiene el último peso de una vaca",
-          parameters: {
-            type: "object",
-            properties: {
-              nombre: { type: "string" }
-            },
-            required: ["nombre"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "getEstado",
-          description: "Obtiene el estado actual de una vaca",
-          parameters: {
-            type: "object",
-            properties: {
-              nombre: { type: "string" }
-            },
-            required: ["nombre"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "getEdad",
-          description: "Obtiene la fecha de nacimiento de una vaca",
-          parameters: {
-            type: "object",
-            properties: {
-              nombre: { type: "string" }
-            },
-            required: ["nombre"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "getVacunas",
-          description: "Obtiene las vacunas aplicadas a una vaca",
-          parameters: {
-            type: "object",
-            properties: {
-              nombre: { type: "string" }
-            },
-            required: ["nombre"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "getEnfermedades",
-          description: "Obtiene enfermedades registradas de una vaca",
-          parameters: {
-            type: "object",
-            properties: {
-              nombre: { type: "string" }
-            },
-            required: ["nombre"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "getHistorial",
-          description: "Obtiene historial de propiedad de una vaca",
-          parameters: {
-            type: "object",
-            properties: {
-              nombre: { type: "string" }
-            },
-            required: ["nombre"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "getVenta",
-          description: "Obtiene información de venta de una vaca",
-          parameters: {
-            type: "object",
-            properties: {
-              nombre: { type: "string" }
-            },
-            required: ["nombre"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "getResumen",
-          description: "Obtiene información completa de una vaca",
-          parameters: {
-            type: "object",
-            properties: {
-              nombre: { type: "string" }
-            },
-            required: ["nombre"]
-          }
-        }
-      }
-    ]
+    tools: buildToolSchemas()
   });
 
   const toolCall = response.message?.tool_calls?.[0];
@@ -312,35 +279,35 @@ Si la pregunta es sobre una vaca, intenta usar la herramienta más adecuada.
   try {
     switch (toolName) {
       case "getPeso":
-        resultado = await getPeso(String(argumentos.nombre ?? ""));
+        resultado = await getPeso(String(argumentos.nombre ?? ""), usuarioId);
         break;
 
       case "getEstado":
-        resultado = await getEstado(String(argumentos.nombre ?? ""));
+        resultado = await getEstado(String(argumentos.nombre ?? ""), usuarioId);
         break;
 
       case "getEdad":
-        resultado = await getEdad(String(argumentos.nombre ?? ""));
+        resultado = await getEdad(String(argumentos.nombre ?? ""), usuarioId);
         break;
 
       case "getVacunas":
-        resultado = await getVacunas(String(argumentos.nombre ?? ""));
+        resultado = await getVacunas(String(argumentos.nombre ?? ""), usuarioId);
         break;
 
       case "getEnfermedades":
-        resultado = await getEnfermedades(String(argumentos.nombre ?? ""));
+        resultado = await getEnfermedades(String(argumentos.nombre ?? ""), usuarioId);
         break;
 
       case "getHistorial":
-        resultado = await getHistorial(String(argumentos.nombre ?? ""));
+        resultado = await getHistorial(String(argumentos.nombre ?? ""), usuarioId);
         break;
 
       case "getVenta":
-        resultado = await getVenta(String(argumentos.nombre ?? ""));
+        resultado = await getVenta(String(argumentos.nombre ?? ""), usuarioId);
         break;
 
       case "getResumen":
-        resultado = await getResumen(String(argumentos.nombre ?? ""));
+        resultado = await getResumen(String(argumentos.nombre ?? ""), usuarioId);
         break;
 
       default:

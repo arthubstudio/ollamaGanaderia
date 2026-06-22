@@ -8,20 +8,24 @@ const sql = postgres(
 );
 
 export async function getResumen(
-  nombre: string
+  nombre: string,
+  usuarioId?: number | null
 ) {
+  if (!usuarioId) return null;
 
   const rows = await sql`
-
-    SELECT *
-
+    SELECT
+      id,
+      nombre,
+      numero_arete,
+      raza,
+      sexo,
+      fecha_nacimiento,
+      estado
     FROM vacas
-
-    WHERE LOWER(nombre)
-    = LOWER(${nombre})
-
+    WHERE LOWER(nombre) = LOWER(${nombre})
+      AND usuario_id = ${usuarioId}
     LIMIT 1
-
   `;
 
   return rows[0] ?? null;

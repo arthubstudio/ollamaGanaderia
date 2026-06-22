@@ -20,7 +20,7 @@ const stats = computed(() => [
     label: "Vacas registradas",
     value: data.value?.totalVacas ?? 0,
     suffix: "",
-    icon: "🐄",
+    icon: "mdi:cow",
     color: "from-emerald-500 to-emerald-700",
     bg: "bg-emerald-50"
   },
@@ -28,7 +28,7 @@ const stats = computed(() => [
     label: "Vacunas aplicadas",
     value: data.value?.vacunasAplicadas ?? 0,
     suffix: "",
-    icon: "💉",
+    icon: "lucide:syringe",
     color: "from-sky-500 to-blue-600",
     bg: "bg-sky-50"
   },
@@ -36,7 +36,7 @@ const stats = computed(() => [
     label: "Peso promedio",
     value: data.value?.pesoPromedio ?? 0,
     suffix: " kg",
-    icon: "⚖️",
+    icon: "lucide:scale",
     color: "from-amber-500 to-orange-600",
     bg: "bg-amber-50"
   }
@@ -47,35 +47,35 @@ const acciones = [
     to: "/vacas",
     title: "Gestionar vacas",
     desc: "Registra, edita y consulta tu ganado",
-    icon: "🐄",
+    icon: "mdi:cow",
     accent: "hover:border-emerald-300 hover:shadow-emerald-100"
   },
   {
     to: "/ia",
     title: "Asistente IA",
     desc: "Pregunta en lenguaje natural con voz",
-    icon: "✨",
+    icon: "lucide:sparkles",
     accent: "hover:border-violet-300 hover:shadow-violet-100 ring-1 ring-violet-100"
   },
   {
     to: "/duenos",
     title: "Dueños",
     desc: "Administra propietarios del rancho",
-    icon: "👤",
+    icon: "lucide:user",
     accent: "hover:border-stone-300"
   },
   {
     to: "/ranchos",
     title: "Ranchos",
     desc: "Ubicaciones y propiedades ganaderas",
-    icon: "🏡",
+    icon: "lucide:warehouse",
     accent: "hover:border-stone-300"
   },
   {
     to: "/observabilidad",
     title: "Observabilidad",
     desc: "Auditoría de consultas y latencia IA",
-    icon: "📊",
+    icon: "lucide:bar-chart-3",
     accent: "hover:border-stone-300"
   }
 ];
@@ -104,7 +104,8 @@ const acciones = [
           to="/ia"
           class="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-white text-emerald-800 font-semibold hover:bg-emerald-50 transition shadow-lg shrink-0"
         >
-          ✨ Preguntar a la IA
+          <Icon name="lucide:sparkles" class="size-5" />
+          Preguntar a la IA
         </NuxtLink>
       </div>
     </section>
@@ -117,10 +118,10 @@ const acciones = [
       >
         <div class="flex items-start justify-between">
           <div
-            class="w-12 h-12 rounded-2xl flex items-center justify-center text-xl"
+            class="w-12 h-12 rounded-2xl flex items-center justify-center"
             :class="stat.bg"
           >
-            {{ stat.icon }}
+            <Icon :name="stat.icon" class="size-6 text-stone-700" />
           </div>
           <div
             class="w-2 h-2 rounded-full bg-gradient-to-br opacity-80"
@@ -152,8 +153,8 @@ const acciones = [
           :class="accion.accent"
         >
           <div class="flex items-start gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-stone-50 group-hover:scale-105 transition flex items-center justify-center text-2xl">
-              {{ accion.icon }}
+            <div class="w-12 h-12 rounded-2xl bg-stone-50 group-hover:scale-105 transition flex items-center justify-center">
+              <Icon :name="accion.icon" class="size-6 text-stone-700" />
             </div>
             <div>
               <h3 class="font-bold text-stone-900 group-hover:text-emerald-700 transition">

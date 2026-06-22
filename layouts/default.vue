@@ -3,10 +3,10 @@ const route = useRoute();
 const usuario = useState<any>("usuario", () => null);
 
 const navItems = [
-  { to: "/", label: "Inicio", icon: "🏠" },
-  { to: "/vacas", label: "Vacas", icon: "🐄" },
-  { to: "/ia", label: "Asistente IA", icon: "✨" },
-  { to: "/observabilidad", label: "Observabilidad", icon: "📊" }
+  { to: "/", label: "Inicio", icon: "lucide:home" },
+  { to: "/vacas", label: "Vacas", icon: "mdi:cow" },
+  { to: "/ia", label: "Asistente IA", icon: "lucide:sparkles" },
+  { to: "/observabilidad", label: "Observabilidad", icon: "lucide:bar-chart-3" }
 ];
 
 function isActive(path: string) {
@@ -29,8 +29,8 @@ function cerrarSesion() {
     <aside class="hidden lg:flex w-72 bg-white border-r border-stone-200 flex-col shadow-sm">
       <div class="p-6 border-b border-stone-100">
         <div class="flex items-center gap-3">
-          <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-white flex items-center justify-center text-xl shadow-lg shadow-emerald-900/20">
-            🐄
+          <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-white flex items-center justify-center shadow-lg shadow-emerald-900/20">
+            <Icon name="mdi:cow" class="size-6" />
           </div>
           <div>
             <h1 class="text-lg font-bold text-stone-900 leading-tight">
@@ -53,7 +53,7 @@ function cerrarSesion() {
             ? 'bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100'
             : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'"
         >
-          <span class="text-lg">{{ item.icon }}</span>
+          <Icon :name="item.icon" class="size-5 shrink-0" />
           {{ item.label }}
         </NuxtLink>
       </nav>
@@ -79,7 +79,7 @@ function cerrarSesion() {
       <header class="h-16 lg:h-20 bg-white/80 backdrop-blur border-b border-stone-200 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-10">
         <div class="flex items-center gap-3 lg:hidden">
           <div class="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center">
-            🐄
+            <Icon name="mdi:cow" class="size-5" />
           </div>
           <span class="font-bold text-stone-900">Ganadería IA</span>
         </div>
@@ -98,7 +98,8 @@ function cerrarSesion() {
             to="/ia"
             class="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition shadow-sm"
           >
-            ✨ Preguntar a la IA
+            <Icon name="lucide:sparkles" class="size-4" />
+            Preguntar a la IA
           </NuxtLink>
 
           <button

@@ -282,8 +282,8 @@ function detenerStream() {
   <div class="max-w-4xl mx-auto h-[calc(100vh-7rem)] lg:h-[calc(100vh-8.5rem)] flex flex-col">
     <div class="shrink-0 mb-4">
       <div class="flex items-center gap-3">
-        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-violet-500 to-emerald-600 text-white flex items-center justify-center text-lg shadow-lg shadow-emerald-900/10">
-          ✨
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-violet-500 to-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-900/10">
+          <Icon name="lucide:sparkles" class="size-5" />
         </div>
         <div>
           <h1 class="text-xl font-bold text-stone-900">
@@ -305,8 +305,8 @@ function detenerStream() {
           v-if="!mensajes.length"
           class="h-full flex flex-col items-center justify-center text-center px-4 py-8"
         >
-          <div class="w-16 h-16 rounded-3xl bg-emerald-50 flex items-center justify-center text-3xl mb-4">
-            🐄
+          <div class="w-16 h-16 rounded-3xl bg-emerald-50 flex items-center justify-center mb-4">
+            <Icon name="mdi:cow" class="size-9 text-emerald-700" />
           </div>
           <h2 class="text-lg font-semibold text-stone-800">
             ¿En qué te ayudo hoy?
@@ -427,7 +427,7 @@ function detenerStream() {
                 ? 'bg-red-100 text-red-600 animate-pulse'
                 : 'text-stone-500 hover:bg-stone-100 hover:text-stone-800'"
             >
-              🎤
+              <Icon name="lucide:mic" class="size-5" />
             </button>
 
             <button
@@ -437,7 +437,7 @@ function detenerStream() {
               class="w-10 h-10 rounded-xl bg-stone-200 text-stone-700 hover:bg-stone-300 transition flex items-center justify-center"
               title="Detener"
             >
-              ■
+              <Icon name="lucide:square" class="size-4 fill-current" />
             </button>
 
             <button
@@ -447,7 +447,7 @@ function detenerStream() {
               class="w-10 h-10 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 transition flex items-center justify-center shadow-sm"
               title="Enviar"
             >
-              ↑
+              <Icon name="lucide:arrow-up" class="size-5" />
             </button>
           </div>
         </div>

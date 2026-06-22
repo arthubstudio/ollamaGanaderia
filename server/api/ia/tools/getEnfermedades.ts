@@ -8,25 +8,22 @@ const sql = postgres(
 );
 
 export async function getEnfermedades(
-  nombre: string
+  nombre: string,
+  usuarioId?: number | null
 ) {
+  if (!usuarioId) return [];
 
   return await sql`
-
     SELECT
-
       e.nombre,
       e.tratamiento,
       e.fecha,
       e.veterinario
-
     FROM enfermedades e
-
     INNER JOIN vacas v
       ON v.id = e.vaca_id
-
-    WHERE LOWER(v.nombre)
-    = LOWER(${nombre})
-
+    WHERE LOWER(v.nombre) = LOWER(${nombre})
+      AND v.usuario_id = ${usuarioId}
+    ORDER BY e.fecha DESC, e.id DESC
   `;
 }

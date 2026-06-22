@@ -53,6 +53,56 @@ function tokenizeForStreaming(text: string) {
   return parts && parts.length ? parts : [text];
 }
 
+function getKeywordsFromText(text: string) {
+  const stopwords = new Set([
+    "la", "el", "los", "las", "de", "del", "y", "o", "a", "al", "en",
+    "que", "se", "su", "sus", "un", "una", "unos", "unas", "mi", "mis",
+    "tu", "tus", "le", "les", "lo", "es", "son",
+    "esta", "este", "estos", "estas", "con", "por", "para", "me",
+    "te", "nos", "si", "no", "ya", "muy"
+  ]);
+
+  return normalizeText(text)
+    .split(" ")
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 3)
+    .filter((p) => !stopwords.has(p));
+}
+
+function buscarMemoriasRelacionadas(pregunta: string, memories: any[]) {
+  const q = normalizeText(pregunta);
+  const keywordsPregunta = getKeywordsFromText(q);
+
+  return memories.filter((m) => {
+    const contenido = normalizeText(m.contenido ?? "");
+    const keywordsContenido = getKeywordsFromText(contenido);
+
+    return (
+      keywordsContenido.some((k: string) => q.includes(k)) ||
+      keywordsPregunta.some((k) => contenido.includes(k))
+    );
+  });
+}
+
+function extraerConsultaEspecificaVaca(texto: string) {
+  const t = normalizeText(texto);
+
+  const patterns = [
+    /\bde la vaca\s+([a-z0-9_-]+)/i,
+    /\bde vaca\s+([a-z0-9_-]+)/i,
+    /\bmi vaca\s+([a-z0-9_-]+)/i,
+    /\bvaca\s+([a-z0-9_-]+)/i,
+    /\barete\s+([a-z0-9_-]+)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = t.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return null;
+}
+
 function detectMemoryWrite(text: string) {
   const raw = (text ?? "").trim();
   const normalized = normalizeText(raw);
@@ -206,6 +256,21 @@ function detectMemoryWrite(text: string) {
     };
   }
 
+  const factMatch = cleanedNormalized.match(
+    /^(?:a\s+)?(.+?)\s+(le gusta|gusta|come|duerme|toma|prefiere|vive en|esta en|está en)\s+(.+)$/
+  );
+
+  if (factMatch) {
+    const subject = slug(factMatch[1] ?? "entidad");
+
+    return {
+      slot: `fact_${subject}`,
+      tipo: "hecho",
+      contenido: cleaned,
+      respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
   if (
     normalized.startsWith("recuerda que ") ||
     normalized.startsWith("recuerda ") ||
@@ -243,6 +308,11 @@ function memorySlotFromQuestion(text: string) {
   if (t.includes("soy") || t.includes("me llamo")) return "identidad";
   if (t.includes("vivo en")) return "vivo_en";
   if (t.includes("trabajo en")) return "trabajo_en";
+  if (t.includes("le gusta")) return "fact";
+  if (t.includes("gusta")) return "fact";
+  if (t.includes("come")) return "fact";
+  if (t.includes("duerme")) return "fact";
+  if (t.includes("toma")) return "fact";
 
   return null;
 }
@@ -263,8 +333,83 @@ function isMemoryQuestion(text: string) {
     t.includes("rancho favorito") ||
     t.includes("proveedor favorito") ||
     t.includes("dueno favorito") ||
-    t.includes("dueño favorito")
+    t.includes("dueño favorito") ||
+    t.includes("le gusta") ||
+    t.includes("gusta") ||
+    t.includes("come") ||
+    t.includes("duerme") ||
+    t.includes("toma") ||
+    t.includes("prefiere")
   );
+}
+
+function isHelpQuestion(text: string) {
+  const t = normalizeText(text);
+
+  const phrases = [
+    "que puedes hacer",
+    "qué puedes hacer",
+    "como me ayudas",
+    "cómo me ayudas",
+    "como funcionas",
+    "cómo funcionas",
+    "para que sirves",
+    "para qué sirves",
+    "que funciones tienes",
+    "qué funciones tienes",
+    "que informacion manejas",
+    "qué información manejas",
+    "que puedes consultar",
+    "qué puedes consultar",
+    "ayuda",
+    "help",
+    "que puedes hacer por mi",
+    "qué puedes hacer por mí",
+    "en que me puedes ayudar",
+    "en qué me puedes ayudar",
+    "como me puedes hacer util",
+    "cómo me puedes hacer útil",
+    "como me puedes hacer de utilidad",
+    "en que me puedes hacer util",
+    "en qué me puedes hacer útil",
+    "para que me sirves",
+    "para qué me sirves"
+  ];
+
+  return phrases.some((p) => t.includes(normalizeText(p)));
+}
+
+function helpAnswer() {
+  return `
+Soy Ganadería AI.
+
+Puedo ayudarte con:
+
+• Consultar vacas registradas
+• Consultar pesos
+• Consultar vacunas
+• Consultar enfermedades
+• Consultar dueños
+• Consultar ranchos
+• Consultar historial de propiedad
+• Consultar ventas
+• Verificar si una vaca está lista para venta
+• Consultar veterinarios
+• Consultar tratamientos
+• Guardar y recordar memorias tuyas
+
+Ejemplos:
+
+- ¿Cuántas vacas tengo?
+- ¿Cuánto pesa Lola?
+- ¿Qué vacunas tiene ToroMax?
+- ¿Qué enfermedades tiene Meme?
+- ¿Quién es el dueño actual de esa vaca?
+- ¿Está lista para venta?
+- ¿Qué recuerdas de mí?
+- ¿En qué me puedes ayudar?
+- ¿Cómo me puedes hacer útil?
+`.trim();
 }
 
 function buildRagMessages(params: {
@@ -336,6 +481,7 @@ export default defineEventHandler(async (event) => {
       : null;
 
   const preguntaOriginal = body.pregunta ?? "";
+  const pregunta = normalizeText(preguntaOriginal);
   const wantsStream = Boolean(body.stream);
   const sessionId = conversationId ?? `user:${usuarioId ?? "anonymous"}`;
   const toolsExecuted: ToolExecution[] = [];
@@ -436,7 +582,7 @@ export default defineEventHandler(async (event) => {
     texto: string,
     meta?: {
       wasBlocked?: boolean;
-      ttftMs?: number | null;
+      ttftMs: number | null;
       tools?: ToolExecution[];
       alreadyStreamed?: boolean;
     }
@@ -554,6 +700,39 @@ export default defineEventHandler(async (event) => {
     }
 
     // =====================================================
+    // CARGAR VACAS DEL USUARIO
+    // =====================================================
+
+    const vacas = usuarioId
+      ? await sql`
+          SELECT *
+          FROM vacas
+          WHERE usuario_id = ${usuarioId}
+        `
+      : await sql`
+          SELECT *
+          FROM vacas
+        `;
+
+    const animalMatch =
+      vacas.find((v: any) => {
+        const nombre = normalizeText(v.nombre ?? "");
+        const arete = normalizeText(v.numero_arete ?? "");
+
+        return pregunta.includes(nombre) || pregunta.includes(arete);
+      }) ?? null;
+
+    const consultaEspecifica = extraerConsultaEspecificaVaca(preguntaOriginal);
+
+    if (consultaEspecifica && !animalMatch) {
+      return await finish(
+        "sql",
+        `No encontré ninguna vaca llamada "${consultaEspecifica}" en tu cuenta.`,
+        { tools: toolsExecuted }
+      );
+    }
+
+    // =====================================================
     // CONSULTA DE MEMORIA
     // =====================================================
 
@@ -566,8 +745,13 @@ export default defineEventHandler(async (event) => {
         FROM memories
         WHERE usuario_id = ${usuarioId}
         ORDER BY updated_at DESC, id DESC
-        LIMIT 20
+        LIMIT 100
       `;
+
+      const relacionadas = buscarMemoriasRelacionadas(
+        preguntaOriginal,
+        memoriesUsuario
+      );
 
       let respuestaMemoria = "";
 
@@ -610,6 +794,14 @@ export default defineEventHandler(async (event) => {
         }
       }
 
+      if (!respuestaMemoria && relacionadas.length) {
+        respuestaMemoria =
+          "Esto encuentro relacionado:\n\n" +
+          relacionadas
+            .map((m: any) => `• ${m.contenido}`)
+            .join("\n");
+      }
+
       if (!respuestaMemoria) {
         if (!memoriesUsuario.length) {
           respuestaMemoria = "No tengo recuerdos almacenados sobre ti.";
@@ -630,10 +822,18 @@ export default defineEventHandler(async (event) => {
     }
 
     // =====================================================
-    // FILTRO GANADERO
+    // AYUDA GENERAL
     // =====================================================
 
-    const pregunta = normalizeText(preguntaOriginal);
+    if (isHelpQuestion(preguntaOriginal)) {
+      return await finish("ayuda", helpAnswer(), {
+        tools: toolsExecuted
+      });
+    }
+
+    // =====================================================
+    // FILTRO GANADERO
+    // =====================================================
 
     const palabrasGanaderas = [
       "pesa",
@@ -692,33 +892,6 @@ export default defineEventHandler(async (event) => {
     if (wantsStream) sseWrite({ estado: "Buscando información..." });
 
     // =====================================================
-    // CARGAR VACAS
-    // =====================================================
-
-    const vacas = usuarioId
-      ? await sql`
-          SELECT *
-          FROM vacas
-          WHERE usuario_id = ${usuarioId}
-        `
-      : await sql`
-          SELECT *
-          FROM vacas
-        `;
-
-    // =====================================================
-    // DETECTAR VACA
-    // =====================================================
-
-    const animalMatch =
-      vacas.find((v: any) => {
-        const nombre = normalizeText(v.nombre ?? "");
-        const arete = normalizeText(v.numero_arete ?? "");
-
-        return pregunta.includes(nombre) || pregunta.includes(arete);
-      }) ?? null;
-
-    // =====================================================
     // LISTA PARA VENTA
     // =====================================================
 
@@ -754,7 +927,9 @@ export default defineEventHandler(async (event) => {
       pregunta.includes("puede transportarse") ||
       pregunta.includes("cumple para movilizacion")
     ) {
-      if (!animalMatch) {
+      const animalParaVenta = animalMatch;
+
+      if (!animalParaVenta) {
         return await finish("sql", "No encontré esa vaca.", {
           tools: toolsExecuted
         });
@@ -764,14 +939,14 @@ export default defineEventHandler(async (event) => {
         name: "ia.venta",
         status: "SUCCESS",
         params: {
-          nombre: animalMatch.nombre
+          nombre: animalParaVenta.nombre
         }
       });
 
       const ventaResponse = await $fetch("/api/ia/venta", {
         method: "POST",
         body: {
-          nombre: animalMatch.nombre
+          nombre: animalParaVenta.nombre
         }
       });
 
@@ -974,7 +1149,9 @@ export default defineEventHandler(async (event) => {
       name: "ia.function-calling",
       status: "SUCCESS",
       params: {
-        pregunta: preguntaOriginal
+        pregunta: preguntaOriginal,
+        usuario_id: usuarioId,
+        conversation_id: conversationId
       }
     });
 
@@ -982,7 +1159,9 @@ export default defineEventHandler(async (event) => {
       const functionResponse = await $fetch("/api/ia/function-calling", {
         method: "POST",
         body: {
-          pregunta: preguntaOriginal
+          pregunta: preguntaOriginal,
+          usuario_id: usuarioId,
+          conversation_id: conversationId
         }
       });
 

@@ -1,7 +1,10 @@
 import postgres from "postgres";
-import ollama from "ollama";
+import { ollama } from "~/lib/ollama";
 import { setResponseHeader } from "h3";
-import { detectPromptInjection } from "~/server/lib/guardrails";
+import {
+  detectPromptInjection,
+  GUARDRAIL_BLOCKED_MESSAGE
+} from "~/server/lib/guardrails";
 
 const sql = postgres(
   "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
@@ -87,6 +90,14 @@ function buscarMemoriasRelacionadas(pregunta: string, memories: any[]) {
 function extraerConsultaEspecificaVaca(texto: string) {
   const t = normalizeText(texto);
 
+  if (
+    /vaca[s]?\s+favorita[s]?/.test(t) ||
+    /rancho[s]?\s+favorito[s]?/.test(t) ||
+    /proveedor[s]?\s+favorito[s]?/.test(t)
+  ) {
+    return null;
+  }
+
   const patterns = [
     /\bde la vaca\s+([a-z0-9_-]+)/i,
     /\bde vaca\s+([a-z0-9_-]+)/i,
@@ -120,6 +131,18 @@ function detectMemoryWrite(text: string) {
       tipo: "preferencia",
       contenido: cleaned,
       respuesta: `Entendido, recordaré que ${cleaned}.`
+    };
+  }
+
+  const invertedVacaFavorita = cleanedNormalized.match(/^(.+?)\s+es mi vaca favorita$/);
+  if (invertedVacaFavorita?.[1]) {
+    const nombre = invertedVacaFavorita[1].trim();
+    const contenido = `Mi vaca favorita es ${nombre}`;
+    return {
+      slot: "vaca_favorita",
+      tipo: "preferencia",
+      contenido,
+      respuesta: `Entendido, recordaré que ${contenido}.`
     };
   }
 
@@ -298,9 +321,9 @@ function detectMemoryWrite(text: string) {
 function memorySlotFromQuestion(text: string) {
   const t = normalizeText(text);
 
-  if (t.includes("vaca favorita")) return "vaca_favorita";
-  if (t.includes("rancho favorito")) return "rancho_favorito";
-  if (t.includes("proveedor favorito")) return "proveedor_favorito";
+  if (/vaca[s]?\s+favorita[s]?/.test(t)) return "vaca_favorita";
+  if (/rancho[s]?\s+favorito[s]?/.test(t)) return "rancho_favorito";
+  if (/proveedor[s]?\s+favorito[s]?/.test(t)) return "proveedor_favorito";
   if (t.includes("dueño favorito") || t.includes("dueno favorito")) return "dueno_favorito";
   if (t.includes("me gusta")) return "me_gusta";
   if (t.includes("no me gusta")) return "no_me_gusta";
@@ -308,11 +331,6 @@ function memorySlotFromQuestion(text: string) {
   if (t.includes("soy") || t.includes("me llamo")) return "identidad";
   if (t.includes("vivo en")) return "vivo_en";
   if (t.includes("trabajo en")) return "trabajo_en";
-  if (t.includes("le gusta")) return "fact";
-  if (t.includes("gusta")) return "fact";
-  if (t.includes("come")) return "fact";
-  if (t.includes("duerme")) return "fact";
-  if (t.includes("toma")) return "fact";
 
   return null;
 }
@@ -320,26 +338,26 @@ function memorySlotFromQuestion(text: string) {
 function isMemoryQuestion(text: string) {
   const t = normalizeText(text);
 
+  const recallPhrases = [
+    "que recuerdas de mi",
+    "que sabes de mi",
+    "que sabes sobre mi",
+    "que recuerdas",
+    "que has guardado",
+    "mis memorias",
+    "mis recuerdos"
+  ];
+
+  if (recallPhrases.some((phrase) => t.includes(phrase))) {
+    return true;
+  }
+
   return (
-    t.includes("que recuerdas de mi") ||
-    t.includes("qué recuerdas de mí") ||
-    t.includes("que sabes de mi") ||
-    t.includes("qué sabes de mí") ||
-    t.includes("que sabes sobre mi") ||
-    t.includes("qué sabes sobre mí") ||
-    t.includes("que recuerdas") ||
-    t.includes("qué recuerdas") ||
-    t.includes("vaca favorita") ||
-    t.includes("rancho favorito") ||
-    t.includes("proveedor favorito") ||
+    /vaca[s]?\s+favorita[s]?/.test(t) ||
+    /rancho[s]?\s+favorito[s]?/.test(t) ||
+    /proveedor[s]?\s+favorito[s]?/.test(t) ||
     t.includes("dueno favorito") ||
-    t.includes("dueño favorito") ||
-    t.includes("le gusta") ||
-    t.includes("gusta") ||
-    t.includes("come") ||
-    t.includes("duerme") ||
-    t.includes("toma") ||
-    t.includes("prefiere")
+    t.includes("dueño favorito")
   );
 }
 
@@ -648,10 +666,10 @@ export default defineEventHandler(async (event) => {
       });
 
       if (wantsStream) {
-        sseWrite({ estado: "Solicitud bloqueada por seguridad." });
+        sseWrite({ estado: GUARDRAIL_BLOCKED_MESSAGE });
       }
 
-      return await finish("guardrail", "Solicitud bloqueada por seguridad.", {
+      return await finish("guardrail", GUARDRAIL_BLOCKED_MESSAGE, {
         wasBlocked: true,
         tools: toolsExecuted
       });
@@ -694,7 +712,15 @@ export default defineEventHandler(async (event) => {
 
       if (wantsStream) sseWrite({ estado: "Guardando memoria..." });
 
-      return await finish("memoria", memoryWrite.respuesta, {
+      const memoryFailed = toolsExecuted.some(
+        (t) => t.name === "memories.create" && t.status === "ERROR"
+      );
+
+      const respuestaMemoria = memoryFailed
+        ? "No pude guardar la memoria. Intenta de nuevo."
+        : memoryWrite.respuesta;
+
+      return await finish("memoria", respuestaMemoria, {
         tools: toolsExecuted
       });
     }
@@ -879,7 +905,7 @@ export default defineEventHandler(async (event) => {
       pregunta.includes(palabra)
     );
 
-    if (!esGanadera) {
+    if (!esGanadera && !animalMatch) {
       if (wantsStream) sseWrite({ estado: "No encontré información relacionada." });
 
       return await finish(
@@ -1144,6 +1170,10 @@ export default defineEventHandler(async (event) => {
     // =====================================================
     // FUNCTION CALLING
     // =====================================================
+
+    if (wantsStream) {
+      sseWrite({ estado: "Consultando base de datos..." });
+    }
 
     toolsExecuted.push({
       name: "ia.function-calling",
@@ -1530,13 +1560,59 @@ ${enfermedadesRows.length}
       historial
     });
 
-    if (wantsStream) {
-      let finalText = "";
-      let firstTokenAt: number | null = null;
+    const ollamaUnavailable =
+      "No pude consultar el modelo de IA. Verifica que el contenedor ollamaganaderia esté en ejecución.";
 
-      const stream = await ollama.chat({
+    try {
+      if (wantsStream) {
+        let finalText = "";
+        let firstTokenAt: number | null = null;
+
+        const stream = await ollama.chat({
+          model: "llama3.2:latest",
+          stream: true,
+          options: {
+            temperature: 0,
+            top_p: 0.1
+          },
+          messages: ragMessages
+        });
+
+        for await (const chunk of stream as any) {
+          const token = chunk.message?.content ?? "";
+          if (!token) continue;
+
+          if (firstTokenAt === null) {
+            firstTokenAt = Date.now();
+            const ttftMs = firstTokenAt - requestStart;
+            sseWrite({ estado: "Recibiendo respuesta..." });
+            toolsExecuted.push({
+              name: "ollama.chat",
+              status: "SUCCESS",
+              params: {
+                model: "llama3.2:latest",
+                stream: true
+              },
+              result: { ttft_ms: ttftMs }
+            });
+          }
+
+          finalText += token;
+          sseWrite({ token });
+        }
+
+        const ttftMs = firstTokenAt ? firstTokenAt - requestStart : null;
+
+        return await finish("rag", finalText.trim() || "No encontré información relacionada en el sistema.", {
+          ttftMs,
+          alreadyStreamed: true,
+          tools: toolsExecuted
+        });
+      }
+
+      const response = await ollama.chat({
         model: "llama3.2:latest",
-        stream: true,
+        stream: false,
         options: {
           temperature: 0,
           top_p: 0.1
@@ -1544,68 +1620,37 @@ ${enfermedadesRows.length}
         messages: ragMessages
       });
 
-      for await (const chunk of stream as any) {
-        const token = chunk.message?.content ?? "";
-        if (!token) continue;
+      const respuestaFinal =
+        response.message?.content?.trim() ||
+        "No encontré información relacionada en el sistema.";
 
-        if (firstTokenAt === null) {
-          firstTokenAt = Date.now();
-          const ttftMs = firstTokenAt - requestStart;
-          sseWrite({ estado: "Recibiendo respuesta..." });
-          toolsExecuted.push({
-            name: "ollama.chat",
-            status: "SUCCESS",
-            params: {
-              model: "llama3.2:latest",
-              stream: true
-            },
-            result: { ttft_ms: ttftMs }
-          });
+      toolsExecuted.push({
+        name: "ollama.chat",
+        status: "SUCCESS",
+        params: {
+          model: "llama3.2:latest",
+          stream: false
+        },
+        result: {
+          response: respuestaFinal
         }
+      });
 
-        finalText += token;
-        sseWrite({ token });
-      }
+      return await finish("rag", respuestaFinal, {
+        ttftMs: null,
+        tools: toolsExecuted
+      });
+    } catch (ollamaError: any) {
+      toolsExecuted.push({
+        name: "ollama.chat",
+        status: "ERROR",
+        error: String(ollamaError?.message ?? ollamaError)
+      });
 
-      const ttftMs = firstTokenAt ? firstTokenAt - requestStart : null;
-
-      return await finish("rag", finalText.trim() || "No encontré información relacionada en el sistema.", {
-        ttftMs,
-        alreadyStreamed: true,
+      return await finish("rag", ollamaUnavailable, {
         tools: toolsExecuted
       });
     }
-
-    const response = await ollama.chat({
-      model: "llama3.2:latest",
-      stream: false,
-      options: {
-        temperature: 0,
-        top_p: 0.1
-      },
-      messages: ragMessages
-    });
-
-    const respuestaFinal =
-      response.message?.content?.trim() ||
-      "No encontré información relacionada en el sistema.";
-
-    toolsExecuted.push({
-      name: "ollama.chat",
-      status: "SUCCESS",
-      params: {
-        model: "llama3.2:latest",
-        stream: false
-      },
-      result: {
-        response: respuestaFinal
-      }
-    });
-
-    return await finish("rag", respuestaFinal, {
-      ttftMs: null,
-      tools: toolsExecuted
-    });
   } catch (error: any) {
     const errorText = `Error interno en el router: ${String(
       error?.message ?? error

@@ -1,4 +1,4 @@
-import ollama from "ollama";
+import { ollama } from "~/lib/ollama";
 
 import { getPeso } from "./tools/getPeso";
 import { getEstado } from "./tools/getEstado";
@@ -238,26 +238,39 @@ export default defineEventHandler(async (event) => {
     };
   }
 
-  const response = await ollama.chat({
-    model: "llama3.2:latest",
-    messages: [
-      {
-        role: "system",
-        content: `
+  let response;
+
+  try {
+    response = await ollama.chat({
+      model: "llama3.2:latest",
+      messages: [
+        {
+          role: "system",
+          content: `
 Eres un asistente ganadero.
 Debes usar herramientas cuando necesites consultar información exacta de la base de datos.
 No inventes datos.
 Si la pregunta es sobre una vaca, intenta usar la herramienta más adecuada.
 Si no encuentras la vaca en la cuenta del usuario, responde que no la encontraste en su cuenta.
 `.trim()
-      },
-      {
-        role: "user",
-        content: pregunta
-      }
-    ],
-    tools: buildToolSchemas()
-  });
+        },
+        {
+          role: "user",
+          content: pregunta
+        }
+      ],
+      tools: buildToolSchemas()
+    });
+  } catch (error: any) {
+    return {
+      encontrado: false,
+      tool: null,
+      argumentos: null,
+      resultado: null,
+      respuesta: "",
+      error: String(error?.message ?? error)
+    };
+  }
 
   const toolCall = response.message?.tool_calls?.[0];
 

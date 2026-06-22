@@ -1,5 +1,5 @@
 import postgres from "postgres";
-import { generarEmbedding } from "~/lib/embeddings";
+import { generarEmbeddingSafe } from "~/lib/embeddings";
 
 const sql = postgres(
   "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
@@ -233,38 +233,64 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const embedding = await generarEmbedding(inferred.contenido);
-  const vector = `[${embedding.join(",")}]`;
+  const embedding = await generarEmbeddingSafe(inferred.contenido);
 
-  await sql`
-    INSERT INTO memories (
-      usuario_id,
-      slot,
-      tipo,
-      contenido,
-      embedding,
-      updated_at
-    )
-    VALUES (
-      ${usuarioId},
-      ${inferred.slot},
-      ${inferred.tipo},
-      ${inferred.contenido},
-      ${vector}::vector,
-      NOW()
-    )
-    ON CONFLICT (usuario_id, slot)
-    DO UPDATE SET
-      tipo = EXCLUDED.tipo,
-      contenido = EXCLUDED.contenido,
-      embedding = EXCLUDED.embedding,
-      updated_at = NOW()
-  `;
+  if (embedding) {
+    const vector = `[${embedding.join(",")}]`;
+
+    await sql`
+      INSERT INTO memories (
+        usuario_id,
+        slot,
+        tipo,
+        contenido,
+        embedding,
+        updated_at
+      )
+      VALUES (
+        ${usuarioId},
+        ${inferred.slot},
+        ${inferred.tipo},
+        ${inferred.contenido},
+        ${vector}::vector,
+        NOW()
+      )
+      ON CONFLICT (usuario_id, slot)
+      DO UPDATE SET
+        tipo = EXCLUDED.tipo,
+        contenido = EXCLUDED.contenido,
+        embedding = EXCLUDED.embedding,
+        updated_at = NOW()
+    `;
+  } else {
+    await sql`
+      INSERT INTO memories (
+        usuario_id,
+        slot,
+        tipo,
+        contenido,
+        updated_at
+      )
+      VALUES (
+        ${usuarioId},
+        ${inferred.slot},
+        ${inferred.tipo},
+        ${inferred.contenido},
+        NOW()
+      )
+      ON CONFLICT (usuario_id, slot)
+      DO UPDATE SET
+        tipo = EXCLUDED.tipo,
+        contenido = EXCLUDED.contenido,
+        updated_at = NOW()
+    `;
+  }
 
   return {
     ok: true,
     slot: inferred.slot,
     tipo: inferred.tipo,
-    contenido: inferred.contenido
+    contenido: inferred.contenido,
+    embedding: embedding ? true : false
   };
 });

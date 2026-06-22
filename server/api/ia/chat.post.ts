@@ -1,5 +1,5 @@
 import postgres from "postgres";
-import ollama from "ollama";
+import { ollama } from "~/lib/ollama";
 import { generarEmbedding } from "~/lib/embeddings";
 
 const sql = postgres(

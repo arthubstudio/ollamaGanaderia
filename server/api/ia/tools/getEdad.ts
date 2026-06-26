@@ -16,7 +16,7 @@ export async function getEdad(
   const rows = await sql`
     SELECT
       fecha_nacimiento
-    FROM vacas
+    FROM bovinos
     WHERE LOWER(nombre) = LOWER(${nombre})
       AND usuario_id = ${usuarioId}
     LIMIT 1

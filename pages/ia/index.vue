@@ -26,8 +26,8 @@ const chatContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<HTMLTextAreaElement | null>(null);
 
 const sugerencias = [
-  { label: "Mis vacas", prompt: "¿Qué vacas tengo registradas?" },
-  { label: "Conteo", prompt: "¿Cuántas vacas tengo?" },
+  { label: "Mis bovinos", prompt: "¿Qué bovinos tengo registrados?" },
+  { label: "Conteo", prompt: "¿Cuántos bovinos tengo?" },
   { label: "Memoria", prompt: "¿Qué recuerdas de mí?" },
   { label: "Ayuda", prompt: "¿En qué me puedes ayudar?" }
 ];
@@ -290,7 +290,7 @@ function detenerStream() {
             Asistente Ganadero
           </h1>
           <p class="text-sm text-stone-500">
-            Pregunta sobre vacas, vacunas, pesos y más
+            Pregunta sobre bovinos, vacunas, pesos y más
           </p>
         </div>
       </div>

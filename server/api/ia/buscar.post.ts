@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   const resultados = await sql`
 
     SELECT
-      vaca_id,
+      bovino_id,
       contenido,
 
       embedding <=> ${vector}::vector

@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
 
     return {
 
-      totalVacas: 0,
+      totalBovinos: 0,
       vacunasAplicadas: 0,
       pesoPromedio: 0
 
@@ -33,11 +33,11 @@ export default defineEventHandler(async (event) => {
   // TOTAL VACAS DEL USUARIO
   // =====================================================
 
-  const totalVacas = await sql`
+  const totalBovinos = await sql`
 
     SELECT COUNT(*) AS total
 
-    FROM vacas
+    FROM bovinos
 
     WHERE usuario_id =
     ${usuarioId}
@@ -54,8 +54,8 @@ export default defineEventHandler(async (event) => {
 
     FROM vacuna_aplicada va
 
-    INNER JOIN vacas v
-    ON v.id = va.vaca_id
+    INNER JOIN bovinos v
+    ON v.id = va.bovino_id
 
     WHERE v.usuario_id =
     ${usuarioId}
@@ -77,8 +77,8 @@ export default defineEventHandler(async (event) => {
 
     FROM pesos p
 
-    INNER JOIN vacas v
-    ON v.id = p.vaca_id
+    INNER JOIN bovinos v
+    ON v.id = p.bovino_id
 
     WHERE v.usuario_id =
     ${usuarioId}
@@ -87,9 +87,9 @@ export default defineEventHandler(async (event) => {
 
   return {
 
-    totalVacas:
+    totalBovinos:
       Number(
-        totalVacas[0].total
+        totalBovinos[0].total
       ),
 
     vacunasAplicadas:

@@ -20,8 +20,8 @@ export async function getEnfermedades(
       e.fecha,
       e.veterinario
     FROM enfermedades e
-    INNER JOIN vacas v
-      ON v.id = e.vaca_id
+    INNER JOIN bovinos v
+      ON v.id = e.bovino_id
     WHERE LOWER(v.nombre) = LOWER(${nombre})
       AND v.usuario_id = ${usuarioId}
     ORDER BY e.fecha DESC, e.id DESC

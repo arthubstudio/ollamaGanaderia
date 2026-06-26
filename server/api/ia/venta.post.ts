@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     await sql`
 
     SELECT *
-    FROM vacas
+    FROM bovinos
 
     WHERE LOWER(nombre)
     = LOWER(${nombre})
@@ -67,7 +67,7 @@ export default defineEventHandler(async (event) => {
 
     FROM pesos
 
-    WHERE vaca_id =
+    WHERE bovino_id =
     ${animal.id}
 
     ORDER BY fecha DESC
@@ -101,7 +101,7 @@ export default defineEventHandler(async (event) => {
     INNER JOIN vacunas vc
     ON vc.id = va.vacuna_id
 
-    WHERE va.vaca_id =
+    WHERE va.bovino_id =
     ${animal.id}
 
   `;

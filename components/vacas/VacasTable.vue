@@ -82,7 +82,7 @@ defineProps({
           <td class="p-5">
 
             <NuxtLink
-              :to="`/vacas/${vaca.id}`"
+              :to="`/bovinos/${vaca.id}`"
               class="bg-black text-white px-4 py-2 rounded-xl text-sm"
             >
               Ver

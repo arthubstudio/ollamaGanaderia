@@ -36,7 +36,7 @@ async function guardar() {
     await $fetch("/api/vacunas-aplicadas", {
       method: "POST",
       body: {
-        vaca_id: vacaId,
+        bovino_id: vacaId,
         usuario_id: usuario.value.id,
         vacuna_id: Number(form.vacuna_id),
         fecha_aplicacion: form.fecha_aplicacion,
@@ -45,7 +45,7 @@ async function guardar() {
       }
     });
 
-    await navigateTo(`/vacas/${vacaId}`);
+    await navigateTo(`/bovinos/${vacaId}`);
   } catch (error) {
     console.error(error);
     alert("Error guardando vacuna");
@@ -59,7 +59,7 @@ async function guardar() {
       <div>
         <h1 class="text-4xl font-bold">Aplicar vacuna</h1>
         <p class="text-gray-500 mt-2">
-          Registrar vacuna aplicada a la vaca.
+          Registrar vacuna aplicada al bovino.
         </p>
       </div>
 

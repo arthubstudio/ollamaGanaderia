@@ -55,7 +55,7 @@ async function login() {
             Tu rancho, bajo control inteligente
           </h1>
           <p class="mt-6 text-emerald-100/90 text-lg leading-relaxed">
-            Consulta vacas, vacunas y pesos con lenguaje natural. Todo en un solo lugar, rápido e intuitivo.
+            Consulta bovinos, vacunas y pesos con lenguaje natural. Todo en un solo lugar, rápido e intuitivo.
           </p>
 
           <div class="mt-10 space-y-3 text-emerald-50/90">
@@ -135,7 +135,17 @@ async function login() {
             </button>
           </form>
 
-          <p class="mt-6 text-center text-xs text-stone-400">
+          <p class="mt-6 text-center text-sm text-stone-600">
+            ¿No tienes cuenta?
+            <NuxtLink
+              to="/register"
+              class="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline"
+            >
+              Regístrate
+            </NuxtLink>
+          </p>
+
+          <p class="mt-4 text-center text-xs text-stone-400">
             Demo: pedro@gmail.com · 123456
           </p>
         </div>

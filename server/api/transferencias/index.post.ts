@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
     .insert(historialPropiedad)
     .values({
 
-      vaca_id: body.vaca_id,
+      bovino_id: body.bovino_id,
 
       dueno_id: body.dueno_id,
 

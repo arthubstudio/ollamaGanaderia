@@ -21,7 +21,7 @@ export async function guardarContextoSemantico(
   await sql`
 
     INSERT INTO semantic_contexts
-    (vaca_id, contenido, embedding)
+    (bovino_id, contenido, embedding)
 
     VALUES (
       ${vacaId},

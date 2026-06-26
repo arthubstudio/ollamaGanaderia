@@ -13,9 +13,9 @@ const usuario =
   );
 
 
-const { data: vacas, refresh } =
+const { data: bovinos, refresh } =
   await useFetch(
-    "/api/vacas",
+    "/api/bovinos",
     {
       query: {
         usuario_id:
@@ -24,18 +24,18 @@ const { data: vacas, refresh } =
     }
   );
 
-const filteredVacas = computed(() => {
+const filteredBovinos = computed(() => {
 
-  if (!vacas.value) {
+  if (!bovinos.value) {
     return [];
   }
 
-  return vacas.value.filter(
-    (vaca: any) => {
+  return bovinos.value.filter(
+    (bovino: any) => {
 
       return (
 
-        vaca.nombre
+        bovino.nombre
           ?.toLowerCase()
           .includes(
             search.value.toLowerCase()
@@ -43,7 +43,7 @@ const filteredVacas = computed(() => {
 
         ||
 
-        vaca.raza
+        bovino.raza
           ?.toLowerCase()
           .includes(
             search.value.toLowerCase()
@@ -51,7 +51,7 @@ const filteredVacas = computed(() => {
 
         ||
 
-        vaca.numero_arete
+        bovino.numero_arete
           ?.toLowerCase()
           .includes(
             search.value.toLowerCase()
@@ -64,13 +64,13 @@ const filteredVacas = computed(() => {
 
 });
 
-async function eliminarVaca(
+async function eliminarBovino(
   id: number
 ) {
 
   const ok =
     confirm(
-      "¿Eliminar esta vaca?"
+      "¿Eliminar este bovino?"
     );
 
   if (!ok) {
@@ -80,7 +80,7 @@ async function eliminarVaca(
   try {
 
     await $fetch(
-      `/api/vacas/${id}`,
+      `/api/bovinos/${id}`,
       {
         method: "DELETE"
       }
@@ -121,13 +121,13 @@ async function eliminarVaca(
         <h1
           class="text-4xl font-bold"
         >
-          Vacas
+          Bovinos
         </h1>
 
         <p
           class="text-gray-500 mt-2"
         >
-          Gestión inteligente del ganado.
+          Gestión de vacas, toros y ganado bovino.
         </p>
 
       </div>
@@ -135,10 +135,10 @@ async function eliminarVaca(
 
 
       <NuxtLink
-        to="/vacas/create"
+        to="/bovinos/create"
         class="bg-black text-white px-6 py-4 rounded-2xl font-semibold"
       >
-        Nueva Vaca
+        Nuevo bovino
       </NuxtLink>
 
     </div>
@@ -154,7 +154,7 @@ async function eliminarVaca(
       <input
         v-model="search"
         type="text"
-        placeholder="Buscar vaca..."
+        placeholder="Buscar bovino..."
         class="w-full bg-white border border-gray-200 rounded-2xl p-4 outline-none"
       />
 
@@ -207,25 +207,25 @@ async function eliminarVaca(
         <tbody>
 
           <tr
-            v-for="vaca in filteredVacas"
-            :key="vaca.id"
+            v-for="bovino in filteredBovinos"
+            :key="bovino.id"
             class="border-b border-gray-100 hover:bg-gray-50"
           >
 
             <td class="p-5">
-              {{ vaca.numero_arete }}
+              {{ bovino.numero_arete }}
             </td>
 
             <td class="p-5 font-semibold">
-              {{ vaca.nombre }}
+              {{ bovino.nombre }}
             </td>
 
             <td class="p-5">
-              {{ vaca.raza }}
+              {{ bovino.raza }}
             </td>
 
             <td class="p-5">
-              {{ vaca.sexo }}
+              {{ bovino.sexo }}
             </td>
 
             <td class="p-5">
@@ -233,7 +233,7 @@ async function eliminarVaca(
               <div class="flex gap-2">
 
                 <NuxtLink
-                  :to="`/vacas/${vaca.id}`"
+                  :to="`/bovinos/${bovino.id}`"
                   class="px-3 py-2 rounded-xl text-sm bg-gray-100 hover:bg-gray-200"
                 >
                   Ver
@@ -242,7 +242,7 @@ async function eliminarVaca(
 
 
                 <NuxtLink
-                  :to="`/vacas/${vaca.id}/edit`"
+                  :to="`/bovinos/${bovino.id}/edit`"
                   class="px-3 py-2 rounded-xl text-sm bg-black text-white"
                 >
                   Editar
@@ -251,7 +251,7 @@ async function eliminarVaca(
 
 
                 <button
-                  @click="eliminarVaca(vaca.id)"
+                  @click="eliminarBovino(bovino.id)"
                   class="px-3 py-2 rounded-xl text-sm bg-red-600 text-white"
                 >
                   Eliminar

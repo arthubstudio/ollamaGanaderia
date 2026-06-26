@@ -32,7 +32,7 @@ async function guardar() {
 
       body: {
 
-        vaca_id:
+        bovino_id:
           vacaId,
 
         dueno_id:
@@ -54,7 +54,7 @@ async function guardar() {
     }
   );
 
-  await navigateTo(`/vacas/${vacaId}`);
+  await navigateTo(`/bovinos/${vacaId}`);
 }
 </script>
 

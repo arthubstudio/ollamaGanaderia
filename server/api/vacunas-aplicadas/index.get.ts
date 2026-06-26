@@ -5,7 +5,7 @@ import { and, desc, eq } from "drizzle-orm";
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
 
-  const vacaId = Number(query.vaca_id);
+  const vacaId = Number(query.bovino_id);
   const usuarioId = Number(query.usuario_id);
 
   if (!vacaId || !usuarioId) {
@@ -13,12 +13,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const vaca = await db
-    .select({ id: vacas.id })
-    .from(vacas)
+    .select({ id: bovinos.id })
+    .from(bovinos)
     .where(
       and(
-        eq(vacas.id, vacaId),
-        eq(vacas.usuario_id, usuarioId)
+        eq(bovinos.id, vacaId),
+        eq(bovinos.usuario_id, usuarioId)
       )
     );
 
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
   return await db
     .select({
       id: vacunaAplicada.id,
-      vaca_id: vacunaAplicada.vaca_id,
+      bovino_id: vacunaAplicada.bovino_id,
       vacuna_id: vacunaAplicada.vacuna_id,
       fecha_aplicacion: vacunaAplicada.fecha_aplicacion,
       veterinario: vacunaAplicada.veterinario,
@@ -38,6 +38,6 @@ export default defineEventHandler(async (event) => {
     })
     .from(vacunaAplicada)
     .leftJoin(vacunas, eq(vacunaAplicada.vacuna_id, vacunas.id))
-    .where(eq(vacunaAplicada.vaca_id, vacaId))
+    .where(eq(vacunaAplicada.bovino_id, vacaId))
     .orderBy(desc(vacunaAplicada.fecha_aplicacion), desc(vacunaAplicada.id));
 });

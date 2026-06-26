@@ -22,7 +22,7 @@ export async function getResumen(
       sexo,
       fecha_nacimiento,
       estado
-    FROM vacas
+    FROM bovinos
     WHERE LOWER(nombre) = LOWER(${nombre})
       AND usuario_id = ${usuarioId}
     LIMIT 1

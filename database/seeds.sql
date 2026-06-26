@@ -80,9 +80,9 @@ CREATE INDEX IF NOT EXISTS ranchos_usuario_id_idx
 ON ranchos(usuario_id);
 
 -- =====================================================
--- VACAS
+-- BOVINOS
 -- =====================================================
-CREATE TABLE IF NOT EXISTS vacas (
+CREATE TABLE IF NOT EXISTS bovinos (
     id SERIAL PRIMARY KEY,
     usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
     numero_arete VARCHAR(50) UNIQUE NOT NULL,
@@ -95,15 +95,15 @@ CREATE TABLE IF NOT EXISTS vacas (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS vacas_usuario_id_idx
-ON vacas(usuario_id);
+CREATE INDEX IF NOT EXISTS bovinos_usuario_id_idx
+ON bovinos(usuario_id);
 
 -- =====================================================
 -- HISTORIAL DE PROPIEDAD
 -- =====================================================
 CREATE TABLE IF NOT EXISTS historial_propiedad (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id) ON DELETE CASCADE,
+    bovino_id INT REFERENCES bovinos(id) ON DELETE CASCADE,
     dueno_id INT REFERENCES duenos(id),
     rancho_id INT REFERENCES ranchos(id),
     fecha_inicio DATE NOT NULL,
@@ -111,8 +111,8 @@ CREATE TABLE IF NOT EXISTS historial_propiedad (
     observaciones TEXT
 );
 
-CREATE INDEX IF NOT EXISTS historial_propiedad_vaca_id_idx
-ON historial_propiedad(vaca_id);
+CREATE INDEX IF NOT EXISTS historial_propiedad_bovino_id_idx
+ON historial_propiedad(bovino_id);
 
 -- =====================================================
 -- VACUNAS
@@ -132,7 +132,7 @@ ON vacunas(usuario_id);
 -- =====================================================
 CREATE TABLE IF NOT EXISTS vacuna_aplicada (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id) ON DELETE CASCADE,
+    bovino_id INT REFERENCES bovinos(id) ON DELETE CASCADE,
     vacuna_id INT REFERENCES vacunas(id),
     fecha_aplicacion DATE,
     veterinario VARCHAR(100),
@@ -140,8 +140,8 @@ CREATE TABLE IF NOT EXISTS vacuna_aplicada (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS vacuna_aplicada_vaca_id_idx
-ON vacuna_aplicada(vaca_id);
+CREATE INDEX IF NOT EXISTS vacuna_aplicada_bovino_id_idx
+ON vacuna_aplicada(bovino_id);
 
 CREATE INDEX IF NOT EXISTS vacuna_aplicada_vacuna_id_idx
 ON vacuna_aplicada(vacuna_id);
@@ -151,58 +151,58 @@ ON vacuna_aplicada(vacuna_id);
 -- =====================================================
 CREATE TABLE IF NOT EXISTS pesos (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id) ON DELETE CASCADE,
+    bovino_id INT REFERENCES bovinos(id) ON DELETE CASCADE,
     peso DECIMAL(10,2),
     fecha DATE,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS pesos_vaca_id_idx
-ON pesos(vaca_id);
+CREATE INDEX IF NOT EXISTS pesos_bovino_id_idx
+ON pesos(bovino_id);
 
 -- =====================================================
 -- ENFERMEDADES
 -- =====================================================
 CREATE TABLE IF NOT EXISTS enfermedades (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id) ON DELETE CASCADE,
+    bovino_id INT REFERENCES bovinos(id) ON DELETE CASCADE,
     nombre VARCHAR(100),
     tratamiento TEXT,
     fecha DATE,
     veterinario VARCHAR(100)
 );
 
-CREATE INDEX IF NOT EXISTS enfermedades_vaca_id_idx
-ON enfermedades(vaca_id);
+CREATE INDEX IF NOT EXISTS enfermedades_bovino_id_idx
+ON enfermedades(bovino_id);
 
 -- =====================================================
 -- VENTAS
 -- =====================================================
 CREATE TABLE IF NOT EXISTS ventas (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id) ON DELETE CASCADE,
+    bovino_id INT REFERENCES bovinos(id) ON DELETE CASCADE,
     comprador VARCHAR(100),
     precio DECIMAL(12,2),
     fecha DATE,
     observaciones TEXT
 );
 
-CREATE INDEX IF NOT EXISTS ventas_vaca_id_idx
-ON ventas(vaca_id);
+CREATE INDEX IF NOT EXISTS ventas_bovino_id_idx
+ON ventas(bovino_id);
 
 -- =====================================================
 -- IA SEMÁNTICA
 -- =====================================================
 CREATE TABLE IF NOT EXISTS semantic_contexts (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id) ON DELETE CASCADE,
+    bovino_id INT REFERENCES bovinos(id) ON DELETE CASCADE,
     contenido TEXT NOT NULL,
     embedding vector(768),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS semantic_contexts_vaca_id_idx
-ON semantic_contexts(vaca_id);
+CREATE INDEX IF NOT EXISTS semantic_contexts_bovino_id_idx
+ON semantic_contexts(bovino_id);
 
 CREATE INDEX IF NOT EXISTS semantic_hnsw_idx
 ON semantic_contexts
@@ -255,7 +255,7 @@ VALUES
 (2, 2, 'Rancho Sur', 'Mérida', 2)
 ON CONFLICT DO NOTHING;
 
-INSERT INTO vacas
+INSERT INTO bovinos
 (id, usuario_id, numero_arete, nombre, raza, sexo, fecha_nacimiento, estado)
 VALUES
 (1, 2, 'MX001', 'Lola', 'Brahman', 'Hembra', '2024-01-10', 'activa'),
@@ -264,7 +264,7 @@ VALUES
 ON CONFLICT (numero_arete) DO NOTHING;
 
 INSERT INTO historial_propiedad
-(id, vaca_id, dueno_id, rancho_id, fecha_inicio, fecha_fin, observaciones)
+(id, bovino_id, dueno_id, rancho_id, fecha_inicio, fecha_fin, observaciones)
 VALUES
 (1, 1, 1, 1, '2025-01-01', NULL, NULL),
 (2, 2, 2, 2, '2025-01-01', NULL, NULL),
@@ -280,7 +280,7 @@ VALUES
 ON CONFLICT (nombre) DO NOTHING;
 
 INSERT INTO vacuna_aplicada
-(id, vaca_id, vacuna_id, fecha_aplicacion, veterinario, observaciones)
+(id, bovino_id, vacuna_id, fecha_aplicacion, veterinario, observaciones)
 VALUES
 (1, 1, 1, '2026-01-10', 'Dr. Martínez', NULL),
 (2, 1, 2, '2026-02-10', 'Dr. Martínez', NULL),
@@ -289,7 +289,7 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO pesos
-(id, vaca_id, peso, fecha)
+(id, bovino_id, peso, fecha)
 VALUES
 (1, 1, 420, '2026-05-01'),
 (2, 2, 510, '2026-05-01'),
@@ -297,20 +297,20 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO enfermedades
-(id, vaca_id, nombre, tratamiento, fecha, veterinario)
+(id, bovino_id, nombre, tratamiento, fecha, veterinario)
 VALUES
 (1, 1, 'Fiebre', 'Antibiótico y descanso', '2026-03-05', 'Dr. López'),
 (2, 3, 'Gripe bovina', 'Observación y vitaminas', '2026-04-12', 'Dr. Roberto')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO ventas
-(id, vaca_id, comprador, precio, fecha, observaciones)
+(id, bovino_id, comprador, precio, fecha, observaciones)
 VALUES
 (1, 2, 'Matadero del Centro', 28000.00, '2026-06-01', 'Venta realizada sin incidencias')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO semantic_contexts
-(id, vaca_id, contenido, updated_at)
+(id, bovino_id, contenido, updated_at)
 VALUES
 (
   1,
@@ -347,7 +347,7 @@ ON CONFLICT DO NOTHING;
 SELECT setval(pg_get_serial_sequence('usuarios', 'id'), COALESCE((SELECT MAX(id) FROM usuarios), 1), true);
 SELECT setval(pg_get_serial_sequence('duenos', 'id'), COALESCE((SELECT MAX(id) FROM duenos), 1), true);
 SELECT setval(pg_get_serial_sequence('ranchos', 'id'), COALESCE((SELECT MAX(id) FROM ranchos), 1), true);
-SELECT setval(pg_get_serial_sequence('vacas', 'id'), COALESCE((SELECT MAX(id) FROM vacas), 1), true);
+SELECT setval(pg_get_serial_sequence('bovinos', 'id'), COALESCE((SELECT MAX(id) FROM bovinos), 1), true);
 SELECT setval(pg_get_serial_sequence('historial_propiedad', 'id'), COALESCE((SELECT MAX(id) FROM historial_propiedad), 1), true);
 SELECT setval(pg_get_serial_sequence('vacunas', 'id'), COALESCE((SELECT MAX(id) FROM vacunas), 1), true);
 SELECT setval(pg_get_serial_sequence('vacuna_aplicada', 'id'), COALESCE((SELECT MAX(id) FROM vacuna_aplicada), 1), true);

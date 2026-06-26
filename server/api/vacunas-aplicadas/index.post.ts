@@ -1,12 +1,12 @@
 import { db } from "~/lib/db";
 import { vacas, vacunaAplicada } from "~/drizzle/schema";
 import { and, eq } from "drizzle-orm";
-import { rebuildVacaContext } from "~/lib/rebuildVacaContext";
+import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
 
-  const vacaId = Number(body.vaca_id);
+  const vacaId = Number(body.bovino_id);
   const usuarioId = Number(body.usuario_id);
   const vacunaId = Number(body.vacuna_id);
 
@@ -18,12 +18,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const vaca = await db
-    .select({ id: vacas.id })
-    .from(vacas)
+    .select({ id: bovinos.id })
+    .from(bovinos)
     .where(
       and(
-        eq(vacas.id, vacaId),
-        eq(vacas.usuario_id, usuarioId)
+        eq(bovinos.id, vacaId),
+        eq(bovinos.usuario_id, usuarioId)
       )
     );
 
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   const result = await db
     .insert(vacunaAplicada)
     .values({
-      vaca_id: vacaId,
+      bovino_id: vacaId,
       vacuna_id: vacunaId,
       fecha_aplicacion: body.fecha_aplicacion,
       veterinario: body.veterinario,
@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
     })
     .returning();
 
-  await rebuildVacaContext(vacaId);
+  await rebuildBovinoContext(vacaId);
 
   return result[0];
 });

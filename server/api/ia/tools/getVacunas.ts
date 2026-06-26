@@ -22,8 +22,8 @@ export async function getVacunas(
     FROM vacuna_aplicada va
     INNER JOIN vacunas vc
       ON vc.id = va.vacuna_id
-    INNER JOIN vacas v
-      ON v.id = va.vaca_id
+    INNER JOIN bovinos v
+      ON v.id = va.bovino_id
     WHERE LOWER(v.nombre) = LOWER(${nombre})
       AND v.usuario_id = ${usuarioId}
     ORDER BY va.fecha_aplicacion DESC, va.id DESC

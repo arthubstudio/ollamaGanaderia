@@ -20,8 +20,8 @@ export async function getVenta(
       ve.fecha,
       ve.observaciones
     FROM ventas ve
-    INNER JOIN vacas v
-      ON v.id = ve.vaca_id
+    INNER JOIN bovinos v
+      ON v.id = ve.bovino_id
     WHERE LOWER(v.nombre) = LOWER(${nombre})
       AND v.usuario_id = ${usuarioId}
     ORDER BY ve.fecha DESC, ve.id DESC

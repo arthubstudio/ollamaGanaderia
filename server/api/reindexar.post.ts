@@ -1,7 +1,7 @@
 import postgres from "postgres";
 
-import { rebuildVacaContext }
-from "~/lib/rebuildVacaContext";
+import { rebuildBovinoContext }
+from "~/lib/rebuildBovinoContext";
 
 const sql = postgres(
   "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
@@ -16,13 +16,13 @@ export default defineEventHandler(async () => {
     await sql`
 
       SELECT id
-      FROM vacas
+      FROM bovinos
 
     `;
 
   for (const vaca of vacas) {
 
-    await rebuildVacaContext(
+    await rebuildBovinoContext(
       vaca.id
     );
 
@@ -33,7 +33,7 @@ export default defineEventHandler(async () => {
     ok: true,
 
     total:
-      vacas.length
+      bovinos.length
 
   };
 

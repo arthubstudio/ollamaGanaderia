@@ -4,7 +4,7 @@ const usuario = useState<any>("usuario", () => null);
 
 const navItems = [
   { to: "/", label: "Inicio", icon: "lucide:home" },
-  { to: "/vacas", label: "Vacas", icon: "mdi:cow" },
+  { to: "/bovinos", label: "Bovinos", icon: "mdi:cow" },
   { to: "/ia", label: "Asistente IA", icon: "lucide:sparkles" },
   { to: "/observabilidad", label: "Observabilidad", icon: "lucide:bar-chart-3" }
 ];

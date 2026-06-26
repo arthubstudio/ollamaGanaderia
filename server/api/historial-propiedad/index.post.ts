@@ -12,8 +12,8 @@ import {
 } from "drizzle-orm";
 
 import {
-  rebuildVacaContext
-} from "~/lib/rebuildVacaContext";
+  rebuildBovinoContext
+} from "~/lib/rebuildBovinoContext";
 
 export default defineEventHandler(
   async (event) => {
@@ -39,15 +39,15 @@ export default defineEventHandler(
     const vaca =
       await db
         .select()
-        .from(vacas)
+        .from(bovinos)
         .where(
           and(
             eq(
-              vacas.id,
-              body.vaca_id
+              bovinos.id,
+              body.bovino_id
             ),
             eq(
-              vacas.usuario_id,
+              bovinos.usuario_id,
               usuarioId
             )
           )
@@ -74,8 +74,8 @@ export default defineEventHandler(
       .where(
         and(
           eq(
-            historialPropiedad.vaca_id,
-            body.vaca_id
+            historialPropiedad.bovino_id,
+            body.bovino_id
           ),
           isNull(
             historialPropiedad.fecha_fin
@@ -90,8 +90,8 @@ export default defineEventHandler(
         )
         .values({
 
-          vaca_id:
-            body.vaca_id,
+          bovino_id:
+            body.bovino_id,
 
           dueno_id:
             body.dueno_id,
@@ -111,8 +111,8 @@ export default defineEventHandler(
         })
         .returning();
 
-    await rebuildVacaContext(
-      body.vaca_id
+    await rebuildBovinoContext(
+      body.bovino_id
     );
 
     return result[0];

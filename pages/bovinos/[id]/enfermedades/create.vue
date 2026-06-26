@@ -30,7 +30,7 @@ async function guardar() {
     await $fetch("/api/enfermedades", {
       method: "POST",
       body: {
-        vaca_id: vacaId,
+        bovino_id: vacaId,
         usuario_id: usuario.value.id,
         nombre: form.nombre,
         tratamiento: form.tratamiento,
@@ -39,7 +39,7 @@ async function guardar() {
       },
     });
 
-    await navigateTo(`/vacas/${vacaId}`);
+    await navigateTo(`/bovinos/${vacaId}`);
   } catch (error) {
     console.error(error);
     alert("Error guardando enfermedad");

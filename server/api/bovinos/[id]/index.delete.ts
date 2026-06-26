@@ -1,7 +1,7 @@
 import { db } from "~/lib/db";
 import { eq, and } from "drizzle-orm";
 import {
-  vacas,
+  bovinos,
   pesos,
   vacunaAplicada,
   enfermedades,
@@ -22,31 +22,31 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const vaca = await db
+  const bovino = await db
     .select()
-    .from(vacas)
+    .from(bovinos)
     .where(
       and(
-        eq(vacas.id, id),
-        eq(vacas.usuario_id, usuarioId)
+        eq(bovinos.id, id),
+        eq(bovinos.usuario_id, usuarioId)
       )
     );
 
-  if (!vaca.length) {
+  if (!bovino.length) {
     throw createError({
       statusCode: 404,
-      statusMessage: "Vaca no encontrada"
+      statusMessage: "Bovino no encontrado"
     });
   }
 
   await db.transaction(async (tx) => {
-    await tx.delete(semanticContexts).where(eq(semanticContexts.vaca_id, id));
-    await tx.delete(vacunaAplicada).where(eq(vacunaAplicada.vaca_id, id));
-    await tx.delete(pesos).where(eq(pesos.vaca_id, id));
-    await tx.delete(enfermedades).where(eq(enfermedades.vaca_id, id));
-    await tx.delete(ventas).where(eq(ventas.vaca_id, id));
-    await tx.delete(historialPropiedad).where(eq(historialPropiedad.vaca_id, id));
-    await tx.delete(vacas).where(eq(vacas.id, id));
+    await tx.delete(semanticContexts).where(eq(semanticContexts.bovino_id, id));
+    await tx.delete(vacunaAplicada).where(eq(vacunaAplicada.bovino_id, id));
+    await tx.delete(pesos).where(eq(pesos.bovino_id, id));
+    await tx.delete(enfermedades).where(eq(enfermedades.bovino_id, id));
+    await tx.delete(ventas).where(eq(ventas.bovino_id, id));
+    await tx.delete(historialPropiedad).where(eq(historialPropiedad.bovino_id, id));
+    await tx.delete(bovinos).where(eq(bovinos.id, id));
   });
 
   return { ok: true };

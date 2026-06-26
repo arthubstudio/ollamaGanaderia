@@ -29,15 +29,15 @@ export default defineEventHandler(
         .select()
         .from(historialPropiedad)
         .innerJoin(
-          vacas,
+          bovinos,
           eq(
-            historialPropiedad.vaca_id,
-            vacas.id
+            historialPropiedad.bovino_id,
+            bovinos.id
           )
         )
         .where(
           eq(
-            vacas.usuario_id,
+            bovinos.usuario_id,
             usuarioId
           )
         );

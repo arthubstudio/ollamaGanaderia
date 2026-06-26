@@ -21,8 +21,8 @@ export async function getHistorial(
       hp.fecha_fin,
       hp.observaciones
     FROM historial_propiedad hp
-    INNER JOIN vacas v
-      ON v.id = hp.vaca_id
+    INNER JOIN bovinos v
+      ON v.id = hp.bovino_id
     LEFT JOIN duenos d
       ON d.id = hp.dueno_id
     LEFT JOIN ranchos r

@@ -2,20 +2,15 @@ import postgres from "postgres";
 
 const sql = postgres(
   "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
+  { prepare: false }
 );
 
-export async function getEstado(
+export async function findBovinoByNombre(
   nombre: string,
-  usuarioId?: number | null
+  usuarioId: number
 ) {
-  if (!usuarioId) return null;
-
   const rows = await sql`
-    SELECT
-      estado
+    SELECT id, nombre, numero_arete
     FROM bovinos
     WHERE LOWER(nombre) = LOWER(${nombre})
       AND usuario_id = ${usuarioId}

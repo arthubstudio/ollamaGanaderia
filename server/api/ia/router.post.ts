@@ -5,6 +5,10 @@ import {
   detectPromptInjection,
   GUARDRAIL_BLOCKED_MESSAGE
 } from "~/server/lib/guardrails";
+import {
+  extraerConsultaEspecificaBovino,
+  isWriteActionBovino
+} from "~/lib/bovinoRouterHelpers";
 
 const sql = postgres(
   "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
@@ -85,33 +89,6 @@ function buscarMemoriasRelacionadas(pregunta: string, memories: any[]) {
       keywordsPregunta.some((k) => contenido.includes(k))
     );
   });
-}
-
-function extraerConsultaEspecificaVaca(texto: string) {
-  const t = normalizeText(texto);
-
-  if (
-    /vaca[s]?\s+favorita[s]?/.test(t) ||
-    /rancho[s]?\s+favorito[s]?/.test(t) ||
-    /proveedor[s]?\s+favorito[s]?/.test(t)
-  ) {
-    return null;
-  }
-
-  const patterns = [
-    /\bde la vaca\s+([a-z0-9_-]+)/i,
-    /\bde vaca\s+([a-z0-9_-]+)/i,
-    /\bmi vaca\s+([a-z0-9_-]+)/i,
-    /\bvaca\s+([a-z0-9_-]+)/i,
-    /\barete\s+([a-z0-9_-]+)/i
-  ];
-
-  for (const pattern of patterns) {
-    const match = t.match(pattern);
-    if (match?.[1]) return match[1];
-  }
-
-  return null;
 }
 
 function detectMemoryWrite(text: string) {
@@ -361,6 +338,10 @@ function isMemoryQuestion(text: string) {
   );
 }
 
+function isWriteAction(text: string) {
+  return isWriteActionBovino(text);
+}
+
 function isHelpQuestion(text: string) {
   const t = normalizeText(text);
 
@@ -403,7 +384,8 @@ Soy Ganadería AI.
 
 Puedo ayudarte con:
 
-• Consultar vacas registradas
+CONSULTAS:
+• Consultar bovinos registrados (vacas y toros)
 • Consultar pesos
 • Consultar vacunas
 • Consultar enfermedades
@@ -411,22 +393,28 @@ Puedo ayudarte con:
 • Consultar ranchos
 • Consultar historial de propiedad
 • Consultar ventas
-• Verificar si una vaca está lista para venta
-• Consultar veterinarios
-• Consultar tratamientos
+• Verificar si un bovino está listo para venta
 • Guardar y recordar memorias tuyas
+
+ACCIONES (puedo hacerlo por ti):
+• Registrar bovinos nuevos (vacas hembras o toros machos)
+• Agregar vacunas al catálogo
+• Aplicar vacunas a un bovino
+• Registrar pesos
+• Registrar enfermedades
 
 Ejemplos:
 
-- ¿Cuántas vacas tengo?
+- ¿Cuántos bovinos tengo?
 - ¿Cuánto pesa Lola?
-- ¿Qué vacunas tiene ToroMax?
-- ¿Qué enfermedades tiene Meme?
-- ¿Quién es el dueño actual de esa vaca?
-- ¿Está lista para venta?
+- Registra un bovino: arete A-101, nombre Lola, raza Holstein, hembra
+- Agrega la vacuna Antiaftosa al catálogo
+- Aplica la vacuna Antiaftosa a Lola
+- Registra 320 kg para ToroMax
+- Registra fiebre aftosa en Meme con tratamiento reposo
 - ¿Qué recuerdas de mí?
-- ¿En qué me puedes ayudar?
-- ¿Cómo me puedes hacer útil?
+
+Nota: una vaca siempre es hembra; un toro siempre es macho. Usa datos cortos y concretos al registrar.
 `.trim();
 }
 
@@ -726,34 +714,95 @@ export default defineEventHandler(async (event) => {
     }
 
     // =====================================================
-    // CARGAR VACAS DEL USUARIO
+    // CARGAR BOVINOS DEL USUARIO
     // =====================================================
 
-    const vacas = usuarioId
+    const bovinos = usuarioId
       ? await sql`
           SELECT *
-          FROM vacas
+          FROM bovinos
           WHERE usuario_id = ${usuarioId}
         `
       : await sql`
           SELECT *
-          FROM vacas
+          FROM bovinos
         `;
 
     const animalMatch =
-      vacas.find((v: any) => {
+      bovinos.find((v: any) => {
         const nombre = normalizeText(v.nombre ?? "");
         const arete = normalizeText(v.numero_arete ?? "");
 
         return pregunta.includes(nombre) || pregunta.includes(arete);
       }) ?? null;
 
-    const consultaEspecifica = extraerConsultaEspecificaVaca(preguntaOriginal);
+    // =====================================================
+    // ACCIONES DE ESCRITURA (function calling prioritario)
+    // =====================================================
+
+    if (isWriteAction(preguntaOriginal)) {
+      if (wantsStream) {
+        sseWrite({ estado: "Ejecutando acción..." });
+      }
+
+      toolsExecuted.push({
+        name: "ia.function-calling",
+        status: "SUCCESS",
+        params: {
+          pregunta: preguntaOriginal,
+          usuario_id: usuarioId,
+          conversation_id: conversationId,
+          modo: "escritura"
+        }
+      });
+
+      try {
+        const functionResponse = await $fetch("/api/ia/function-calling", {
+          method: "POST",
+          body: {
+            pregunta: preguntaOriginal,
+            usuario_id: usuarioId,
+            conversation_id: conversationId
+          }
+        });
+
+        toolsExecuted[toolsExecuted.length - 1].result = functionResponse;
+
+        if (functionResponse?.encontrado) {
+          return await finish("function-calling", functionResponse.respuesta, {
+            tools: toolsExecuted
+          });
+        }
+
+        if (functionResponse?.respuesta) {
+          return await finish("function-calling", functionResponse.respuesta, {
+            tools: toolsExecuted
+          });
+        }
+
+        return await finish(
+          "function-calling",
+          "No pude completar la acción. Verifica los datos e intenta de nuevo.",
+          { tools: toolsExecuted }
+        );
+      } catch (error: any) {
+        toolsExecuted[toolsExecuted.length - 1].status = "ERROR";
+        toolsExecuted[toolsExecuted.length - 1].error = String(error?.message ?? error);
+
+        return await finish(
+          "function-calling",
+          "Ocurrió un error al ejecutar la acción. Intenta de nuevo.",
+          { tools: toolsExecuted }
+        );
+      }
+    }
+
+    const consultaEspecifica = extraerConsultaEspecificaBovino(preguntaOriginal);
 
     if (consultaEspecifica && !animalMatch) {
       return await finish(
         "sql",
-        `No encontré ninguna vaca llamada "${consultaEspecifica}" en tu cuenta.`,
+        `No encontré ningún bovino llamado "${consultaEspecifica}" en tu cuenta.`,
         { tools: toolsExecuted }
       );
     }
@@ -865,6 +914,10 @@ export default defineEventHandler(async (event) => {
       "pesa",
       "vaca",
       "vacas",
+      "bovino",
+      "bovinos",
+      "toro",
+      "toros",
       "ganado",
       "peso",
       "pesos",
@@ -898,7 +951,19 @@ export default defineEventHandler(async (event) => {
       "activa",
       "baja",
       "vendida",
-      "vendido"
+      "vendido",
+      "crear",
+      "crea",
+      "agregar",
+      "agrega",
+      "registrar",
+      "registra",
+      "aplicar",
+      "aplica",
+      "nueva",
+      "nuevo",
+      "catalogo",
+      "catálogo"
     ];
 
     const esGanadera = palabrasGanaderas.some((palabra) =>
@@ -998,19 +1063,19 @@ export default defineEventHandler(async (event) => {
       const result = usuarioId
         ? await sql`
             SELECT COUNT(*) AS total
-            FROM vacas
+            FROM bovinos
             WHERE LOWER(sexo) = 'hembra'
               AND usuario_id = ${usuarioId}
           `
         : await sql`
             SELECT COUNT(*) AS total
-            FROM vacas
+            FROM bovinos
             WHERE LOWER(sexo) = 'hembra'
           `;
 
       return await finish(
         "sql",
-        `Tienes ${result[0].total} vacas hembras.`,
+        `Tienes ${result[0].total} bovinos hembras (vacas).`,
         { tools: toolsExecuted }
       );
     }
@@ -1026,19 +1091,19 @@ export default defineEventHandler(async (event) => {
       const result = usuarioId
         ? await sql`
             SELECT COUNT(*) AS total
-            FROM vacas
+            FROM bovinos
             WHERE LOWER(sexo) = 'macho'
               AND usuario_id = ${usuarioId}
           `
         : await sql`
             SELECT COUNT(*) AS total
-            FROM vacas
+            FROM bovinos
             WHERE LOWER(sexo) = 'macho'
           `;
 
       return await finish(
         "sql",
-        `Tienes ${result[0].total} vacas macho.`,
+        `Tienes ${result[0].total} bovinos machos (toros).`,
         { tools: toolsExecuted }
       );
     }
@@ -1049,22 +1114,25 @@ export default defineEventHandler(async (event) => {
 
     if (
       hasWords(pregunta, ["cuantas", "vacas"]) ||
-      pregunta.includes("total vacas")
+      hasWords(pregunta, ["cuantos", "bovinos"]) ||
+      hasWords(pregunta, ["cuantas", "bovinos"]) ||
+      pregunta.includes("total vacas") ||
+      pregunta.includes("total bovinos")
     ) {
       const result = usuarioId
         ? await sql`
             SELECT COUNT(*) AS total
-            FROM vacas
+            FROM bovinos
             WHERE usuario_id = ${usuarioId}
           `
         : await sql`
             SELECT COUNT(*) AS total
-            FROM vacas
+            FROM bovinos
           `;
 
       return await finish(
         "sql",
-        `Tienes ${result[0].total} vacas registradas.`,
+        `Tienes ${result[0].total} bovinos registrados.`,
         { tools: toolsExecuted }
       );
     }
@@ -1084,18 +1152,18 @@ export default defineEventHandler(async (event) => {
             SELECT DISTINCT
               v.nombre,
               v.numero_arete
-            FROM vacas v
+            FROM bovinos v
             INNER JOIN vacuna_aplicada va
-              ON va.vaca_id = v.id
+              ON va.bovino_id = v.id
             WHERE v.usuario_id = ${usuarioId}
           `
         : await sql`
             SELECT DISTINCT
               v.nombre,
               v.numero_arete
-            FROM vacas v
+            FROM bovinos v
             INNER JOIN vacuna_aplicada va
-              ON va.vaca_id = v.id
+              ON va.bovino_id = v.id
           `;
 
       if (!result.length) {
@@ -1119,12 +1187,19 @@ export default defineEventHandler(async (event) => {
 
     if (
       pregunta.includes("que vacas tengo") ||
+      pregunta.includes("que bovinos tengo") ||
       pregunta.includes("vacas registradas") ||
+      pregunta.includes("bovinos registrados") ||
       pregunta.includes("listar vacas") ||
+      pregunta.includes("listar bovinos") ||
       pregunta.includes("todas las vacas") ||
+      pregunta.includes("todos los bovinos") ||
       pregunta.includes("total de vacas") ||
+      pregunta.includes("total de bovinos") ||
       pregunta.includes("que vacas hay") ||
-      pregunta.includes("listame las vacas ")
+      pregunta.includes("que bovinos hay") ||
+      pregunta.includes("listame las vacas ") ||
+      pregunta.includes("listame los bovinos ")
     ) {
       const result = usuarioId
         ? await sql`
@@ -1133,7 +1208,7 @@ export default defineEventHandler(async (event) => {
               raza,
               sexo,
               numero_arete
-            FROM vacas
+            FROM bovinos
             WHERE usuario_id = ${usuarioId}
           `
         : await sql`
@@ -1142,11 +1217,11 @@ export default defineEventHandler(async (event) => {
               raza,
               sexo,
               numero_arete
-            FROM vacas
+            FROM bovinos
           `;
 
       if (!result.length) {
-        return await finish("sql", "No hay vacas registradas.", {
+        return await finish("sql", "No hay bovinos registrados.", {
           tools: toolsExecuted
         });
       }
@@ -1162,7 +1237,7 @@ export default defineEventHandler(async (event) => {
         })
         .join("\n");
 
-      return await finish("sql", `Vacas registradas:\n${texto}`, {
+      return await finish("sql", `Bovinos registrados:\n${texto}`, {
         tools: toolsExecuted
       });
     }
@@ -1217,7 +1292,7 @@ export default defineEventHandler(async (event) => {
       const pesosRows = await sql`
         SELECT peso, fecha
         FROM pesos
-        WHERE vaca_id = ${vacaId}
+        WHERE bovino_id = ${vacaId}
         ORDER BY fecha DESC
       `;
 
@@ -1229,7 +1304,7 @@ export default defineEventHandler(async (event) => {
         FROM vacuna_aplicada va
         LEFT JOIN vacunas vc
           ON vc.id = va.vacuna_id
-        WHERE va.vaca_id = ${vacaId}
+        WHERE va.bovino_id = ${vacaId}
         ORDER BY va.fecha_aplicacion DESC
       `;
 
@@ -1240,7 +1315,7 @@ export default defineEventHandler(async (event) => {
           fecha,
           veterinario
         FROM enfermedades
-        WHERE vaca_id = ${vacaId}
+        WHERE bovino_id = ${vacaId}
         ORDER BY fecha DESC
       `;
 
@@ -1255,7 +1330,7 @@ export default defineEventHandler(async (event) => {
           ON d.id = hp.dueno_id
         LEFT JOIN ranchos r
           ON r.id = hp.rancho_id
-        WHERE hp.vaca_id = ${vacaId}
+        WHERE hp.bovino_id = ${vacaId}
         ORDER BY hp.fecha_inicio DESC
       `;
 
@@ -1278,7 +1353,7 @@ export default defineEventHandler(async (event) => {
         const ventaRows = await sql`
           SELECT *
           FROM ventas
-          WHERE vaca_id = ${vacaId}
+          WHERE bovino_id = ${vacaId}
           ORDER BY fecha DESC
           LIMIT 1
         `;
@@ -1536,8 +1611,8 @@ ${enfermedadesRows.length}
       ? await sql`
           SELECT contenido
           FROM semantic_contexts sc
-          INNER JOIN vacas v
-            ON v.id = sc.vaca_id
+          INNER JOIN bovinos v
+            ON v.id = sc.bovino_id
           WHERE v.usuario_id = ${usuarioId}
           ORDER BY sc.updated_at DESC, sc.id DESC
           LIMIT 3

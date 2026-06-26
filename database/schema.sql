@@ -13,9 +13,9 @@ CREATE TABLE usuarios (
 );
 
 -- =====================================================
--- VACAS
+-- BOVINOS
 -- =====================================================
-CREATE TABLE vacas (
+CREATE TABLE bovinos (
     id SERIAL PRIMARY KEY,
     usuario_id INT NOT NULL REFERENCES usuarios(id),
     numero_arete VARCHAR(50) UNIQUE NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE vacas (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX vacas_usuario_id_idx ON vacas(usuario_id);
+CREATE INDEX bovinos_usuario_id_idx ON bovinos(usuario_id);
 
 -- =====================================================
 -- DUEÑOS
@@ -64,7 +64,7 @@ CREATE INDEX ranchos_dueno_id_idx ON ranchos(dueno_id);
 -- =====================================================
 CREATE TABLE historial_propiedad (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id),
+    bovino_id INT REFERENCES bovinos(id),
     dueno_id INT REFERENCES duenos(id),
     rancho_id INT REFERENCES ranchos(id),
     fecha_inicio DATE NOT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE historial_propiedad (
     observaciones TEXT
 );
 
-CREATE INDEX historial_propiedad_vaca_id_idx ON historial_propiedad(vaca_id);
+CREATE INDEX historial_propiedad_bovino_id_idx ON historial_propiedad(bovino_id);
 
 -- =====================================================
 -- VACUNAS
@@ -91,7 +91,7 @@ CREATE INDEX vacunas_usuario_id_idx ON vacunas(usuario_id);
 -- =====================================================
 CREATE TABLE vacuna_aplicada (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id),
+    bovino_id INT REFERENCES bovinos(id),
     vacuna_id INT REFERENCES vacunas(id),
     fecha_aplicacion DATE,
     veterinario VARCHAR(100),
@@ -99,7 +99,7 @@ CREATE TABLE vacuna_aplicada (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX vacuna_aplicada_vaca_id_idx ON vacuna_aplicada(vaca_id);
+CREATE INDEX vacuna_aplicada_bovino_id_idx ON vacuna_aplicada(bovino_id);
 CREATE INDEX vacuna_aplicada_vacuna_id_idx ON vacuna_aplicada(vacuna_id);
 
 -- =====================================================
@@ -107,54 +107,54 @@ CREATE INDEX vacuna_aplicada_vacuna_id_idx ON vacuna_aplicada(vacuna_id);
 -- =====================================================
 CREATE TABLE pesos (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id),
+    bovino_id INT REFERENCES bovinos(id),
     peso DECIMAL(10,2),
     fecha DATE,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX pesos_vaca_id_idx ON pesos(vaca_id);
+CREATE INDEX pesos_bovino_id_idx ON pesos(bovino_id);
 
 -- =====================================================
 -- ENFERMEDADES
 -- =====================================================
 CREATE TABLE enfermedades (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id),
+    bovino_id INT REFERENCES bovinos(id),
     nombre VARCHAR(100),
     tratamiento TEXT,
     fecha DATE,
     veterinario VARCHAR(100)
 );
 
-CREATE INDEX enfermedades_vaca_id_idx ON enfermedades(vaca_id);
+CREATE INDEX enfermedades_bovino_id_idx ON enfermedades(bovino_id);
 
 -- =====================================================
 -- VENTAS
 -- =====================================================
 CREATE TABLE ventas (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id),
+    bovino_id INT REFERENCES bovinos(id),
     comprador VARCHAR(100),
     precio DECIMAL(12,2),
     fecha DATE,
     observaciones TEXT
 );
 
-CREATE INDEX ventas_vaca_id_idx ON ventas(vaca_id);
+CREATE INDEX ventas_bovino_id_idx ON ventas(bovino_id);
 
 -- =====================================================
 -- IA SEMÁNTICA
 -- =====================================================
 CREATE TABLE semantic_contexts (
     id SERIAL PRIMARY KEY,
-    vaca_id INT REFERENCES vacas(id),
+    bovino_id INT REFERENCES bovinos(id),
     contenido TEXT NOT NULL,
     embedding vector(768),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX semantic_contexts_vaca_id_idx ON semantic_contexts(vaca_id);
+CREATE INDEX semantic_contexts_bovino_id_idx ON semantic_contexts(bovino_id);
 
 CREATE INDEX semantic_hnsw_idx
 ON semantic_contexts

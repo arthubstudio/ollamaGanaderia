@@ -1,5 +1,5 @@
 import { db } from "~/lib/db";
-import { vacas } from "~/drizzle/schema";
+import { bovinos } from "~/drizzle/schema";
 import { eq } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {
@@ -18,10 +18,10 @@ export default defineEventHandler(async (event) => {
 
   return await db
     .select()
-    .from(vacas)
+    .from(bovinos)
     .where(
       eq(
-        vacas.usuario_id,
+        bovinos.usuario_id,
         usuarioId
       )
     );

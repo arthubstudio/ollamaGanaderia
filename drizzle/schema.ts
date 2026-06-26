@@ -141,11 +141,11 @@ export const conversationMessages =
   );
 
 // =====================================
-// VACAS
+// BOVINOS
 // =====================================
 
-export const vacas = pgTable(
-  "vacas",
+export const bovinos = pgTable(
+  "bovinos",
   {
 
     id: serial("id")
@@ -285,8 +285,8 @@ export const historialPropiedad =
       id: serial("id")
         .primaryKey(),
 
-      vaca_id: integer(
-        "vaca_id"
+      bovino_id: integer(
+        "bovino_id"
       ),
 
       dueno_id: integer(
@@ -355,8 +355,8 @@ export const vacunaAplicada =
       id: serial("id")
         .primaryKey(),
 
-      vaca_id: integer(
-        "vaca_id"
+      bovino_id: integer(
+        "bovino_id"
       ),
 
       vacuna_id: integer(
@@ -396,8 +396,8 @@ export const pesos = pgTable(
     id: serial("id")
       .primaryKey(),
 
-    vaca_id: integer(
-      "vaca_id"
+    bovino_id: integer(
+      "bovino_id"
     ),
 
     peso: numeric(
@@ -429,8 +429,8 @@ export const enfermedades =
       id: serial("id")
         .primaryKey(),
 
-      vaca_id: integer(
-        "vaca_id"
+      bovino_id: integer(
+        "bovino_id"
       ),
 
       nombre: varchar(
@@ -467,8 +467,8 @@ export const ventas = pgTable(
     id: serial("id")
       .primaryKey(),
 
-    vaca_id: integer(
-      "vaca_id"
+    bovino_id: integer(
+      "bovino_id"
     ),
 
     comprador: varchar(
@@ -505,8 +505,8 @@ export const semanticContexts =
       id: serial("id")
         .primaryKey(),
 
-      vaca_id: integer(
-        "vaca_id"
+      bovino_id: integer(
+        "bovino_id"
       ),
 
       contenido: text(

@@ -1,7 +1,7 @@
 import { db } from "~/lib/db";
-import { pesos, vacas } from "~/drizzle/schema";
+import { pesos, bovinos } from "~/drizzle/schema";
 import { and, eq } from "drizzle-orm";
-import { rebuildVacaContext } from "~/lib/rebuildVacaContext";
+import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 
 export default defineEventHandler(async (event) => {
   const id = Number(event.context.params?.id);
@@ -19,14 +19,14 @@ export default defineEventHandler(async (event) => {
   const pesoExistente = await db
     .select({
       id: pesos.id,
-      vaca_id: pesos.vaca_id,
+      bovino_id: pesos.bovino_id,
     })
     .from(pesos)
-    .innerJoin(vacas, eq(pesos.vaca_id, vacas.id))
+    .innerJoin(bovinos, eq(pesos.bovino_id, bovinos.id))
     .where(
       and(
         eq(pesos.id, id),
-        eq(vacas.usuario_id, usuarioId)
+        eq(bovinos.usuario_id, usuarioId)
       )
     );
 
@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
     .where(eq(pesos.id, id))
     .returning();
 
-  await rebuildVacaContext(pesoExistente[0].vaca_id);
+  await rebuildBovinoContext(pesoExistente[0].bovino_id);
 
   return result[0];
 });

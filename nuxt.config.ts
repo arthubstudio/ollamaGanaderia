@@ -5,5 +5,9 @@ export default defineNuxtConfig({
   modules: [
     "@nuxtjs/tailwindcss",
     "@nuxt/icon"
-  ]
+  ],
+  routeRules: {
+    "/vacas": { redirect: "/bovinos" },
+    "/vacas/**": { redirect: "/bovinos/**" }
+  }
 })

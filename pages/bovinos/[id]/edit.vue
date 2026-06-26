@@ -8,7 +8,7 @@ const usuario = useState<any>("usuario", () => null);
 const route = useRoute();
 const vacaId = Number(route.params.id);
 
-const { data: vaca } = await useFetch(`/api/vacas/${vacaId}`, {
+const { data: vaca } = await useFetch(`/api/bovinos/${vacaId}`, {
   query: {
     usuario_id: usuario.value?.id
   }
@@ -40,7 +40,7 @@ async function guardar() {
     return;
   }
 
-  await $fetch(`/api/vacas/${vacaId}`, {
+  await $fetch(`/api/bovinos/${vacaId}`, {
     method: "PUT",
     body: {
       ...form,
@@ -48,13 +48,13 @@ async function guardar() {
     },
   });
 
-  await navigateTo(`/vacas/${vacaId}`);
+  await navigateTo(`/bovinos/${vacaId}`);
 }
 </script>
 
 <template>
   <div v-if="vaca">
-    <h1 class="text-4xl font-bold mb-8">Editar vaca</h1>
+    <h1 class="text-4xl font-bold mb-8">Editar bovino</h1>
 
     <div class="space-y-4 max-w-xl">
       <input v-model="form.numero_arete" class="w-full border p-3 rounded-xl" placeholder="Número arete" />
@@ -63,8 +63,8 @@ async function guardar() {
 
       <select v-model="form.sexo" class="w-full border p-3 rounded-xl">
         <option value="">Sexo</option>
-        <option value="Macho">Macho</option>
-        <option value="Hembra">Hembra</option>
+        <option value="Macho">Macho (toro)</option>
+        <option value="Hembra">Hembra (vaca)</option>
       </select>
 
       <input v-model="form.fecha_nacimiento" type="date" class="w-full border p-3 rounded-xl" />

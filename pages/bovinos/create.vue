@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 
 const usuario =
   useState(
@@ -23,7 +23,7 @@ const form = reactive({
 const loading =
   ref(false);
 
-async function crearVaca() {
+async function crearBovino() {
 
   if (!usuario.value?.id) {
 
@@ -56,7 +56,7 @@ async function crearVaca() {
       true;
 
     await $fetch(
-      "/api/vacas",
+      "/api/bovinos",
       {
 
         method: "POST",
@@ -74,17 +74,17 @@ async function crearVaca() {
     );
 
     await navigateTo(
-      "/vacas"
+      "/bovinos"
     );
 
   }
 
-  catch (error) {
+  catch (error: any) {
 
     console.error(error);
 
     alert(
-      "Error al crear la vaca."
+      error?.data?.statusMessage ?? "Error al registrar el bovino."
     );
 
   }
@@ -111,7 +111,7 @@ async function crearVaca() {
       <h1
         class="text-4xl font-bold"
       >
-        Nueva Vaca
+        Nuevo bovino
       </h1>
 
     </div>
@@ -152,11 +152,11 @@ async function crearVaca() {
           </option>
 
           <option value="Macho">
-            Macho
+            Macho (toro)
           </option>
 
           <option value="Hembra">
-            Hembra
+            Hembra (vaca)
           </option>
 
         </select>
@@ -168,14 +168,14 @@ async function crearVaca() {
         />
 
         <button
-          @click="crearVaca"
+          @click="crearBovino"
           :disabled="loading"
           class="bg-black text-white px-6 py-4 rounded-2xl disabled:opacity-50"
         >
 
           {{ loading
             ? "Guardando..."
-            : "Guardar Vaca"
+            : "Guardar bovino"
           }}
 
         </button>

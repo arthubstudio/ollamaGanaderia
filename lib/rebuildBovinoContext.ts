@@ -45,7 +45,7 @@ function calcularEdad(fechaNacimiento: string | Date | null) {
 
 }
 
-export async function rebuildVacaContext(
+export async function rebuildBovinoContext(
   vacaId: number
 ) {
 
@@ -54,7 +54,7 @@ export async function rebuildVacaContext(
 
       SELECT *
 
-      FROM vacas
+      FROM bovinos
 
       WHERE id = ${vacaId}
 
@@ -84,7 +84,7 @@ export async function rebuildVacaContext(
 
       FROM pesos
 
-      WHERE vaca_id =
+      WHERE bovino_id =
       ${vacaId}
 
       ORDER BY fecha DESC
@@ -111,7 +111,7 @@ export async function rebuildVacaContext(
       LEFT JOIN vacunas vc
       ON vc.id = va.vacuna_id
 
-      WHERE va.vaca_id =
+      WHERE va.bovino_id =
       ${vacaId}
 
       ORDER BY va.fecha_aplicacion DESC
@@ -136,7 +136,7 @@ export async function rebuildVacaContext(
 
       FROM enfermedades
 
-      WHERE vaca_id =
+      WHERE bovino_id =
       ${vacaId}
 
       ORDER BY fecha DESC
@@ -171,7 +171,7 @@ export async function rebuildVacaContext(
       LEFT JOIN ranchos r
       ON r.id = hp.rancho_id
 
-      WHERE hp.vaca_id =
+      WHERE hp.bovino_id =
       ${vacaId}
 
       ORDER BY hp.fecha_inicio DESC
@@ -195,7 +195,7 @@ export async function rebuildVacaContext(
 
       FROM ventas
 
-      WHERE vaca_id =
+      WHERE bovino_id =
       ${vacaId}
 
       ORDER BY fecha DESC
@@ -352,7 +352,7 @@ ${v.fecha}
 
     DELETE FROM semantic_contexts
 
-    WHERE vaca_id =
+    WHERE bovino_id =
     ${vacaId}
 
   `;
@@ -363,7 +363,7 @@ ${v.fecha}
 
     INSERT INTO semantic_contexts (
 
-      vaca_id,
+      bovino_id,
       contenido,
       embedding,
       updated_at

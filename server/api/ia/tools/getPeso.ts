@@ -17,9 +17,9 @@ export async function getPeso(
     SELECT
       p.peso,
       p.fecha
-    FROM vacas v
+    FROM bovinos v
     INNER JOIN pesos p
-      ON p.vaca_id = v.id
+      ON p.bovino_id = v.id
     WHERE LOWER(v.nombre) = LOWER(${nombre})
       AND v.usuario_id = ${usuarioId}
     ORDER BY p.fecha DESC, p.id DESC

@@ -17,8 +17,8 @@ const saludo =
 
 const stats = computed(() => [
   {
-    label: "Vacas registradas",
-    value: data.value?.totalVacas ?? 0,
+    label: "Bovinos registrados",
+    value: data.value?.totalBovinos ?? 0,
     suffix: "",
     icon: "mdi:cow",
     color: "from-emerald-500 to-emerald-700",
@@ -44,9 +44,9 @@ const stats = computed(() => [
 
 const acciones = [
   {
-    to: "/vacas",
-    title: "Gestionar vacas",
-    desc: "Registra, edita y consulta tu ganado",
+    to: "/bovinos",
+    title: "Gestionar bovinos",
+    desc: "Registra vacas, toros y consulta tu ganado",
     icon: "mdi:cow",
     accent: "hover:border-emerald-300 hover:shadow-emerald-100"
   },
@@ -178,19 +178,19 @@ const acciones = [
           to="/ia"
           class="px-4 py-2.5 rounded-full bg-emerald-50 text-emerald-800 text-sm font-medium hover:bg-emerald-100 transition"
         >
-          ¿Cuántas vacas tengo?
+          ¿Cuántos bovinos tengo?
         </NuxtLink>
         <NuxtLink
           to="/ia"
           class="px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-sm font-medium hover:bg-stone-200 transition"
         >
-          ¿Qué vacas tengo registradas?
+          ¿Qué bovinos tengo registrados?
         </NuxtLink>
         <NuxtLink
-          to="/vacas"
+          to="/bovinos"
           class="px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-sm font-medium hover:bg-stone-200 transition"
         >
-          Ver listado de vacas
+          Ver listado de bovinos
         </NuxtLink>
       </div>
     </section>

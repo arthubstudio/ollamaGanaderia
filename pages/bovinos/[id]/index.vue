@@ -8,7 +8,7 @@ const vacaId = Number(route.params.id);
 
 const usuario = useState<any>("usuario", () => null);
 
-const { data: vaca } = await useFetch(`/api/vacas/${vacaId}`, {
+const { data: vaca } = await useFetch(`/api/bovinos/${vacaId}`, {
   query: {
     usuario_id: usuario.value?.id
   }
@@ -16,14 +16,14 @@ const { data: vaca } = await useFetch(`/api/vacas/${vacaId}`, {
 
 const { data: pesos } = await useFetch("/api/pesos", {
   query: {
-    vaca_id: vacaId,
+    bovino_id: vacaId,
     usuario_id: usuario.value?.id
   }
 });
 
 const { data: vacunasAplicadas } = await useFetch("/api/vacunas-aplicadas", {
   query: {
-    vaca_id: vacaId,
+    bovino_id: vacaId,
     usuario_id: usuario.value?.id
   }
 });
@@ -36,14 +36,14 @@ const { data: vacunas } = await useFetch("/api/vacunas", {
 
 const { data: enfermedades } = await useFetch("/api/enfermedades", {
   query: {
-    vaca_id: vacaId,
+    bovino_id: vacaId,
     usuario_id: usuario.value?.id
   }
 });
 
 const { data: historial } = await useFetch("/api/historial-propiedad", {
   query: {
-    vaca_id: vacaId,
+    bovino_id: vacaId,
     usuario_id: usuario.value?.id
   }
 });
@@ -61,22 +61,22 @@ const { data: ranchos } = await useFetch("/api/ranchos", {
 });
 
 const pesosVaca = computed(() =>
-  (pesos.value ?? []).filter((p: any) => p.vaca_id == vacaId)
+  (pesos.value ?? []).filter((p: any) => p.bovino_id == vacaId)
 );
 
 const vacunasVaca = computed(() =>
-  (vacunasAplicadas.value ?? []).filter((v: any) => v.vaca_id == vacaId)
+  (vacunasAplicadas.value ?? []).filter((v: any) => v.bovino_id == vacaId)
 );
 
 const enfermedadesVaca = computed(() =>
-  (enfermedades.value ?? []).filter((e: any) => e.vaca_id == vacaId)
+  (enfermedades.value ?? []).filter((e: any) => e.bovino_id == vacaId)
 );
 
 const tienePeso = computed(() => (pesos.value?.length ?? 0) > 0);
 
 const propiedadActual = computed(() => {
   const lista = historial.value ?? [];
-  return lista.find((h: any) => h.vaca_id == vacaId && h.fecha_fin == null) ?? null;
+  return lista.find((h: any) => h.bovino_id == vacaId && h.fecha_fin == null) ?? null;
 });
 
 const duenoActual = computed(() => {
@@ -95,17 +95,17 @@ const vacunaNombre = (id: number) => {
 };
 
 async function eliminarVaca() {
-  const ok = confirm("¿Eliminar esta vaca?");
+  const ok = confirm("¿Eliminar este bovino?");
   if (!ok) return;
 
-  await $fetch(`/api/vacas/${vacaId}`, {
+  await $fetch(`/api/bovinos/${vacaId}`, {
     method: "DELETE",
     query: {
       usuario_id: usuario.value?.id
     }
   });
 
-  await navigateTo("/vacas");
+  await navigateTo("/bovinos");
 }
 
 const pregunta = ref("");
@@ -116,7 +116,7 @@ async function preguntarIA() {
     method: "POST",
     body: {
       pregunta: `
-Información sobre la vaca ${vaca.value?.nombre ?? ""}
+Información del bovino ${vaca.value?.nombre ?? ""}
 
 ${pregunta.value}
 `,
@@ -139,10 +139,10 @@ ${pregunta.value}
 
       <div class="flex gap-3">
         <NuxtLink
-          :to="`/vacas/${vaca.id}/edit`"
+          :to="`/bovinos/${vaca.id}/edit`"
           class="bg-black text-white px-6 py-3 rounded-2xl font-semibold"
         >
-          Editar vaca
+          Editar bovino
         </NuxtLink>
 
         <button
@@ -182,28 +182,28 @@ ${pregunta.value}
 
     <div class="flex flex-wrap gap-4 mb-10">
       <NuxtLink
-        :to="tienePeso ? `/vacas/${vaca.id}/pesos/edit` : `/vacas/${vaca.id}/pesos/create`"
+        :to="tienePeso ? `/bovinos/${vaca.id}/pesos/edit` : `/bovinos/${vaca.id}/pesos/create`"
         class="bg-black text-white px-5 py-3 rounded-2xl"
       >
         {{ tienePeso ? "Actualizar Peso" : "Agregar Peso" }}
       </NuxtLink>
 
       <NuxtLink
-        :to="`/vacas/${vaca.id}/vacunas/create`"
+        :to="`/bovinos/${vaca.id}/vacunas/create`"
         class="bg-black text-white px-5 py-3 rounded-2xl"
       >
         Aplicar vacuna
       </NuxtLink>
 
       <NuxtLink
-        :to="`/vacas/${vaca.id}/enfermedades/create`"
+        :to="`/bovinos/${vaca.id}/enfermedades/create`"
         class="bg-black text-white px-5 py-3 rounded-2xl"
       >
         Registrar enfermedad
       </NuxtLink>
 
       <NuxtLink
-        :to="`/vacas/${vaca.id}/transferir`"
+        :to="`/bovinos/${vaca.id}/transferir`"
         class="bg-black text-white px-5 py-3 rounded-2xl"
       >
         Transferir propiedad
@@ -263,7 +263,7 @@ ${pregunta.value}
 
       <textarea
         v-model="pregunta"
-        placeholder="Pregunta algo sobre esta vaca..."
+        placeholder="Pregunta algo sobre este bovino..."
         class="w-full h-32 border border-gray-200 rounded-2xl p-4 outline-none"
       />
 

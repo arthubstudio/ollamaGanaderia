@@ -1,5 +1,5 @@
 import { db } from "~/lib/db";
-import { vacas, vacunaAplicada } from "~/drizzle/schema";
+import { bovinos, vacunaAplicada } from "~/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 

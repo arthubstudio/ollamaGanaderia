@@ -54,9 +54,15 @@ export default defineEventHandler(async (event) => {
   const vaca =
     result[0];
 
-  await rebuildBovinoContext(
-    vaca.id
-  );
+  try {
+
+  await rebuildBovinoContext(vaca.id);
+
+  } catch (error) {
+
+    console.error("No se pudo reconstruir el contexto IA:", error);
+
+  }
 
   return vaca;
 

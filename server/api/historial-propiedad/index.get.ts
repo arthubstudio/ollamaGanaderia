@@ -2,7 +2,7 @@ import { db } from "~/lib/db";
 
 import {
   historialPropiedad,
-  vacas
+  bovinos
 } from "~/drizzle/schema";
 
 import {

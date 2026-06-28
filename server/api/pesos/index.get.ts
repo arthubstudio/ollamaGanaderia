@@ -1,5 +1,5 @@
 import { db } from "~/lib/db";
-import { pesos, vacas } from "~/drizzle/schema";
+import { pesos, bovinos } from "~/drizzle/schema";
 import { and, desc, eq } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {

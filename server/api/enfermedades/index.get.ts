@@ -1,5 +1,5 @@
 import { db } from "~/lib/db";
-import { enfermedades, vacas } from "~/drizzle/schema";
+import { enfermedades, bovinos } from "~/drizzle/schema";
 import { and, desc, eq } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {

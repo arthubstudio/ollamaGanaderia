@@ -51,6 +51,13 @@ const acciones = [
     accent: "hover:border-emerald-300 hover:shadow-emerald-100"
   },
   {
+    to: "/vacunas/create",
+    title: "Registrar vacuna",
+    desc: "Agrega una vacuna al catálogo sanitario",
+    icon: "lucide:syringe",
+    accent: "hover:border-sky-300 hover:shadow-sky-100"
+  },
+  {
     to: "/ia",
     title: "Asistente IA",
     desc: "Pregunta en lenguaje natural con voz",
@@ -114,8 +121,17 @@ const acciones = [
       <div
         v-for="stat in stats"
         :key="stat.label"
-        class="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-md transition"
+        class="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm hover:shadow-md transition relative"
       >
+        <NuxtLink
+          v-if="stat.label === 'Vacunas aplicadas'"
+          to="/vacunas/create"
+          class="absolute top-4 right-4 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 text-sky-700 text-xs font-medium hover:bg-sky-100 transition"
+          title="Registrar vacuna"
+        >
+          <Icon name="lucide:plus" class="size-3.5" />
+          Nueva
+        </NuxtLink>
         <div class="flex items-start justify-between">
           <div
             class="w-12 h-12 rounded-2xl flex items-center justify-center"

@@ -1,4 +1,5 @@
 import { ollama } from "~/lib/ollama";
+import { buildHistorialMessages } from "~/lib/conversationContext";
 
 import { getPeso } from "./tools/getPeso";
 import { getEstado } from "./tools/getEstado";
@@ -351,6 +352,7 @@ export default defineEventHandler(async (event) => {
 
   const conversationId = body?.conversation_id ? String(body.conversation_id) : null;
   const usuarioId = body?.usuario_id ? Number(body.usuario_id) : null;
+  const historial = Array.isArray(body?.historial) ? body.historial : [];
 
   if (!pregunta) {
     return {
@@ -393,10 +395,12 @@ Reglas estrictas para registrar bovinos:
 - Si el usuario mezcla "vaca" con sexo masculino, explícale que debe elegir Hembra o registrar un toro (Macho).
 
 Reglas generales:
+- Usa el HISTORIAL DE CONVERSACIÓN para entender referencias como "esa vaca", "y cuánto pesa", "la anterior", etc.
 - No inventes datos. Usa las herramientas para leer y escribir en la base de datos.
 - Si no encuentras el bovino en la cuenta del usuario, indícalo.
 `.trim()
         },
+        ...buildHistorialMessages(historial),
         {
           role: "user",
           content: pregunta

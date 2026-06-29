@@ -80,8 +80,9 @@ CREATE INDEX historial_propiedad_bovino_id_idx ON historial_propiedad(bovino_id)
 CREATE TABLE vacunas (
     id SERIAL PRIMARY KEY,
     usuario_id INT NOT NULL REFERENCES usuarios(id),
-    nombre VARCHAR(100) UNIQUE NOT NULL,
-    descripcion TEXT
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT,
+    UNIQUE (usuario_id, nombre)
 );
 
 CREATE INDEX vacunas_usuario_id_idx ON vacunas(usuario_id);

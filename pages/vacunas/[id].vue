@@ -15,6 +15,24 @@ const form = reactive({
   descripcion: ""
 });
 
+const errorMsg = ref("");
+
+function extraerMensajeError(error: unknown) {
+  const e = error as {
+    data?: { statusMessage?: string; message?: string };
+    statusMessage?: string;
+    message?: string;
+  };
+
+  return (
+    e?.data?.statusMessage ||
+    e?.statusMessage ||
+    e?.data?.message ||
+    e?.message ||
+    "No se pudo actualizar la vacuna."
+  );
+}
+
 watchEffect(() => {
 
   if (!vacuna.value)
@@ -52,9 +70,7 @@ async function guardar() {
 
     console.error(error);
 
-    alert(
-      "Error actualizando vacuna"
-    );
+    errorMsg.value = extraerMensajeError(error);
 
   }
 
@@ -144,6 +160,13 @@ async function eliminar() {
         space-y-6
       "
     >
+
+      <p
+        v-if="errorMsg"
+        class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+      >
+        {{ errorMsg }}
+      </p>
 
       <input
 

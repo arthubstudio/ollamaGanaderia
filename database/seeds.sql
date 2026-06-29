@@ -120,8 +120,9 @@ ON historial_propiedad(bovino_id);
 CREATE TABLE IF NOT EXISTS vacunas (
     id SERIAL PRIMARY KEY,
     usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-    nombre VARCHAR(100) UNIQUE NOT NULL,
-    descripcion TEXT
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT,
+    UNIQUE (usuario_id, nombre)
 );
 
 CREATE INDEX IF NOT EXISTS vacunas_usuario_id_idx

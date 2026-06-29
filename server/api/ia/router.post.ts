@@ -9,6 +9,11 @@ import {
   extraerConsultaEspecificaBovino,
   isWriteActionBovino
 } from "~/lib/bovinoRouterHelpers";
+import {
+  enrichQuestionWithAnimal,
+  isContextualFollowUp,
+  resolveAnimalFromContext
+} from "~/lib/conversationContext";
 
 const sql = postgres(
   "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
@@ -728,13 +733,16 @@ export default defineEventHandler(async (event) => {
           FROM bovinos
         `;
 
-    const animalMatch =
-      bovinos.find((v: any) => {
-        const nombre = normalizeText(v.nombre ?? "");
-        const arete = normalizeText(v.numero_arete ?? "");
+    const animalMatch = resolveAnimalFromContext(
+      pregunta,
+      bovinos,
+      historial
+    );
 
-        return pregunta.includes(nombre) || pregunta.includes(arete);
-      }) ?? null;
+    const preguntaParaAcciones = enrichQuestionWithAnimal(
+      preguntaOriginal,
+      animalMatch
+    );
 
     // =====================================================
     // ACCIONES DE ESCRITURA (function calling prioritario)
@@ -749,7 +757,7 @@ export default defineEventHandler(async (event) => {
         name: "ia.function-calling",
         status: "SUCCESS",
         params: {
-          pregunta: preguntaOriginal,
+          pregunta: preguntaParaAcciones,
           usuario_id: usuarioId,
           conversation_id: conversationId,
           modo: "escritura"
@@ -760,9 +768,10 @@ export default defineEventHandler(async (event) => {
         const functionResponse = await $fetch("/api/ia/function-calling", {
           method: "POST",
           body: {
-            pregunta: preguntaOriginal,
+            pregunta: preguntaParaAcciones,
             usuario_id: usuarioId,
-            conversation_id: conversationId
+            conversation_id: conversationId,
+            historial
           }
         });
 
@@ -970,7 +979,10 @@ export default defineEventHandler(async (event) => {
       pregunta.includes(palabra)
     );
 
-    if (!esGanadera && !animalMatch) {
+    const esSeguimientoContextual =
+      isContextualFollowUp(pregunta) && historial.length > 0;
+
+    if (!esGanadera && !animalMatch && !esSeguimientoContextual) {
       if (wantsStream) sseWrite({ estado: "No encontré información relacionada." });
 
       return await finish(
@@ -1254,7 +1266,7 @@ export default defineEventHandler(async (event) => {
       name: "ia.function-calling",
       status: "SUCCESS",
       params: {
-        pregunta: preguntaOriginal,
+        pregunta: preguntaParaAcciones,
         usuario_id: usuarioId,
         conversation_id: conversationId
       }
@@ -1264,9 +1276,10 @@ export default defineEventHandler(async (event) => {
       const functionResponse = await $fetch("/api/ia/function-calling", {
         method: "POST",
         body: {
-          pregunta: preguntaOriginal,
+          pregunta: preguntaParaAcciones,
           usuario_id: usuarioId,
-          conversation_id: conversationId
+          conversation_id: conversationId,
+          historial
         }
       });
 

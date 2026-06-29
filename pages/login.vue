@@ -3,12 +3,24 @@ definePageMeta({
   layout: "auth"
 });
 
+const route = useRoute();
 const email = ref("pedro@gmail.com");
 const password = ref("123456");
 const loading = ref(false);
 const errorMsg = ref("");
+const successMsg = ref("");
 
 const usuario = useState<any>("usuario", () => null);
+
+onMounted(() => {
+  if (route.query.registrado === "1") {
+    successMsg.value = "¡Cuenta creada exitosamente! Ya puedes iniciar sesión.";
+  }
+
+  if (typeof route.query.email === "string" && route.query.email.trim()) {
+    email.value = route.query.email.trim();
+  }
+});
 
 async function login() {
   if (!email.value.trim() || !password.value) {
@@ -18,6 +30,7 @@ async function login() {
 
   loading.value = true;
   errorMsg.value = "";
+  successMsg.value = "";
 
   try {
     const response = await $fetch("/api/auth/login", {
@@ -118,6 +131,13 @@ async function login() {
                 class="w-full px-4 py-3.5 rounded-2xl border border-stone-200 bg-stone-50 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition"
               >
             </div>
+
+            <p
+              v-if="successMsg"
+              class="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-2xl px-4 py-3"
+            >
+              {{ successMsg }}
+            </p>
 
             <p
               v-if="errorMsg"

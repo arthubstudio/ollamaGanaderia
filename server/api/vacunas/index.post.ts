@@ -1,47 +1,37 @@
-import postgres from "postgres";
-
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  { prepare: false }
-);
+import { crearVacunaUsuario } from "~/lib/vacunaService";
 
 export default defineEventHandler(async (event) => {
+  const body = await readBody(event);
+  const usuarioId = Number(body.usuario_id);
 
-  const body =
-    await readBody(event);
-
-  if (!body.usuario_id) {
-
+  if (!usuarioId) {
     throw createError({
       statusCode: 400,
       statusMessage: "usuario_id requerido"
     });
-
   }
 
-  const result =
-    await sql`
+  try {
+    const result = await crearVacunaUsuario({
+      nombre: String(body.nombre ?? ""),
+      descripcion: body.descripcion ?? null,
+      usuarioId
+    });
 
-      INSERT INTO vacunas (
+    if (!result.ok) {
+      throw createError({
+        statusCode: result.code === "DUPLICATE" ? 409 : 400,
+        statusMessage: result.error
+      });
+    }
 
-        nombre,
-        descripcion,
-        usuario_id
+    return result.vacuna;
+  } catch (error: any) {
+    if (error?.statusCode) throw error;
 
-      )
-
-      VALUES (
-
-        ${body.nombre},
-        ${body.descripcion},
-        ${body.usuario_id}
-
-      )
-
-      RETURNING *
-
-    `;
-
-  return result[0];
-
+    throw createError({
+      statusCode: 500,
+      statusMessage: "No se pudo guardar la vacuna. Intenta de nuevo."
+    });
+  }
 });

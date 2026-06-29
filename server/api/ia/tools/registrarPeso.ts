@@ -2,6 +2,7 @@ import { db } from "~/lib/db";
 import { pesos } from "~/drizzle/schema";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 import { findBovinoByNombre } from "./findBovino";
+import { desc, eq } from "drizzle-orm";
 
 export type RegistrarPesoArgs = {
   nombre: string;
@@ -18,38 +19,69 @@ export async function registrarPeso(
   usuarioId?: number | null
 ) {
   if (!usuarioId) {
-    return { ok: false as const, error: "Se requiere sesión de usuario." };
+    return {
+      ok: false as const,
+      error: "Se requiere sesión de usuario."
+    };
   }
 
   if (!args.nombre?.trim() || !args.peso || args.peso <= 0) {
     return {
       ok: false as const,
-      error: "Indica el nombre de la vaca y un peso válido en kg."
+      error: "Indica el nombre del bovino y un peso válido."
     };
   }
 
-  const vaca = await findBovinoByNombre(args.nombre.trim(), usuarioId);
-  if (!vaca) {
+  const bovino = await findBovinoByNombre(
+    args.nombre.trim(),
+    usuarioId
+  );
+
+  if (!bovino) {
     return {
       ok: false as const,
-      error: `No encontré la vaca "${args.nombre}" en tu cuenta.`
+      error: `No encontré el bovino "${args.nombre}" en tu cuenta.`
     };
   }
 
-  const result = await db
-    .insert(pesos)
-    .values({
-      bovino_id: vaca.id,
-      peso: String(args.peso),
-      fecha: args.fecha?.trim() || todayIsoDate()
-    })
-    .returning();
+  const ultimoPeso = await db
+    .select()
+    .from(pesos)
+    .where(eq(pesos.bovino_id, bovino.id))
+    .orderBy(desc(pesos.fecha), desc(pesos.id))
+    .limit(1);
 
-  await rebuildBovinoContext(vaca.id);
+  let registro;
+
+  if (ultimoPeso.length) {
+    const result = await db
+      .update(pesos)
+      .set({
+        peso: String(args.peso),
+        fecha: args.fecha?.trim() || todayIsoDate()
+      })
+      .where(eq(pesos.id, ultimoPeso[0].id))
+      .returning();
+
+    registro = result[0];
+  } else {
+    const result = await db
+      .insert(pesos)
+      .values({
+        bovino_id: bovino.id,
+        peso: String(args.peso),
+        fecha: args.fecha?.trim() || todayIsoDate()
+      })
+      .returning();
+
+    registro = result[0];
+  }
+
+  await rebuildBovinoContext(bovino.id);
 
   return {
     ok: true as const,
-    registro: result[0],
-    bovino: vaca
+    registro,
+    bovino
   };
 }

@@ -14,6 +14,8 @@ import { crearVacuna } from "./tools/crearVacuna";
 import { aplicarVacuna } from "./tools/aplicarVacuna";
 import { registrarPeso } from "./tools/registrarPeso";
 import { registrarEnfermedad } from "./tools/registrarEnfermedad";
+import { transferirPropiedad } from "./tools/transferirPropiedad";
+import { inferWriteActionFromQuestion } from "~/lib/iaWriteActionRouter";
 
 type AnyObject = Record<string, any>;
 
@@ -237,7 +239,35 @@ Estado: ${resultado.estado ?? "N/D"}`.trim();
 
     case "registrarEnfermedad": {
       if (!resultado?.ok) return resultado?.error ?? "No pude registrar la enfermedad.";
-      return `Enfermedad "${resultado.registro.nombre}" registrada para ${resultado.bovino.nombre}.`;
+      const tipo = resultado.bovino?.sexo === "Macho" ? "bovino" : "vaca";
+      return `Enfermedad "${resultado.registro.nombre}" registrada para ${resultado.bovino.nombre} (${tipo}).`;
+    }
+
+    case "transferirPropiedad": {
+      if (!resultado?.ok) {
+        return resultado?.error ?? "No pude transferir la propiedad.";
+      }
+
+      const partes: string[] = [];
+      if (resultado.duenoCreado && resultado.dueno) {
+        partes.push(`Dueño "${resultado.dueno.nombre}" creado`);
+      }
+      if (resultado.ranchoCreado && resultado.rancho) {
+        partes.push(`Rancho "${resultado.rancho.nombre}" creado`);
+      }
+
+      const detalle = partes.length
+        ? `${partes.join(" y ")} y asignado a ${resultado.bovino.nombre}.`
+        : `Propiedad de ${resultado.bovino.nombre} actualizada correctamente.`;
+
+      const duenoTxt = resultado.dueno?.nombre
+        ? `Dueño: ${resultado.dueno.nombre}.`
+        : "";
+      const ranchoTxt = resultado.rancho?.nombre
+        ? `Rancho: ${resultado.rancho.nombre}.`
+        : "";
+
+      return `${detalle} ${duenoTxt} ${ranchoTxt}`.trim();
     }
 
     default:
@@ -391,21 +421,205 @@ function buildToolSchemas() {
       type: "function",
       function: {
         name: "registrarEnfermedad",
-        description: "Registra una enfermedad para una vaca",
+        description: "Registra o aplica una enfermedad a un bovino. Si el usuario dice 'aplicar enfermedad', usa esta herramienta (NO aplicarVacuna).",
         parameters: {
           type: "object",
           properties: {
-            nombre: { type: "string", description: "Nombre de la vaca" },
+            nombre_vaca: { type: "string", description: "Nombre del bovino (vaca o toro)" },
             enfermedad: { type: "string", description: "Nombre de la enfermedad" },
             tratamiento: { type: "string", description: "Tratamiento (opcional)" },
             fecha: { type: "string", description: "Fecha YYYY-MM-DD (opcional)" },
             veterinario: { type: "string", description: "Veterinario (opcional)" }
           },
-          required: ["nombre", "enfermedad"]
+          required: ["nombre_vaca", "enfermedad"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "transferirPropiedad",
+        description: "Transfiere la propiedad de un bovino a un dueño y/o rancho. Si el dueño o rancho no existen, se crean automáticamente.",
+        parameters: {
+          type: "object",
+          properties: {
+            nombre_vaca: { type: "string", description: "Nombre del bovino (vaca o toro)" },
+            dueno_nombre: { type: "string", description: "Nombre del dueño (opcional si hay rancho)" },
+            rancho_nombre: { type: "string", description: "Nombre del rancho (opcional si hay dueño)" },
+            fecha_inicio: { type: "string", description: "Fecha YYYY-MM-DD (opcional, hoy por defecto)" },
+            observaciones: { type: "string", description: "Observaciones (opcional)" }
+          },
+          required: ["nombre_vaca"]
         }
       }
     }
   ] as const;
+}
+
+async function executeToolCall(
+  toolName: string,
+  argumentos: AnyObject,
+  usuarioId: number | null,
+  nombreAnimalContexto: string | null
+) {
+  switch (toolName) {
+    case "getPeso":
+      return getPeso(String(argumentos.nombre ?? ""), usuarioId);
+
+    case "getEstado":
+      return getEstado(String(argumentos.nombre ?? ""), usuarioId);
+
+    case "getEdad":
+      return getEdad(String(argumentos.nombre ?? ""), usuarioId);
+
+    case "getVacunas":
+      return getVacunas(String(argumentos.nombre ?? ""), usuarioId);
+
+    case "getEnfermedades":
+      return getEnfermedades(String(argumentos.nombre ?? ""), usuarioId);
+
+    case "getHistorial":
+      return getHistorial(String(argumentos.nombre ?? ""), usuarioId);
+
+    case "getVenta":
+      return getVenta(String(argumentos.nombre ?? ""), usuarioId);
+
+    case "getResumen":
+      return getResumen(String(argumentos.nombre ?? ""), usuarioId);
+
+    case "crearBovino":
+      return crearBovino(
+        {
+          numero_arete: String(argumentos.numero_arete ?? ""),
+          nombre: String(argumentos.nombre ?? ""),
+          raza: String(argumentos.raza ?? ""),
+          sexo: String(argumentos.sexo ?? ""),
+          fecha_nacimiento: argumentos.fecha_nacimiento
+            ? String(argumentos.fecha_nacimiento)
+            : undefined,
+          estado: argumentos.estado ? String(argumentos.estado) : undefined
+        },
+        usuarioId
+      );
+
+    case "crearVacuna": {
+      const resultado = await crearVacuna(
+        {
+          nombre: String(argumentos.nombre ?? ""),
+          descripcion: argumentos.descripcion
+            ? String(argumentos.descripcion)
+            : undefined
+        },
+        usuarioId
+      );
+
+      if (resultado?.ok && nombreAnimalContexto) {
+        const applyResult = await aplicarVacuna(
+          {
+            nombre_vaca: nombreAnimalContexto,
+            vacuna_nombre: String(argumentos.nombre ?? "")
+          },
+          usuarioId
+        );
+
+        if (applyResult.ok) {
+          return {
+            ...resultado,
+            aplicada: true,
+            bovino: applyResult.bovino,
+            aplicacion: applyResult.aplicacion
+          };
+        }
+      }
+
+      return resultado;
+    }
+
+    case "aplicarVacuna": {
+      const nombreBovino =
+        String(argumentos.nombre_vaca ?? "").trim() ||
+        nombreAnimalContexto ||
+        "";
+
+      return aplicarVacuna(
+        {
+          nombre_vaca: nombreBovino,
+          vacuna_nombre: String(argumentos.vacuna_nombre ?? ""),
+          fecha_aplicacion: argumentos.fecha_aplicacion
+            ? String(argumentos.fecha_aplicacion)
+            : undefined,
+          veterinario: argumentos.veterinario
+            ? String(argumentos.veterinario)
+            : undefined,
+          observaciones: argumentos.observaciones
+            ? String(argumentos.observaciones)
+            : undefined
+        },
+        usuarioId
+      );
+    }
+
+    case "registrarPeso":
+      return registrarPeso(
+        {
+          nombre: String(argumentos.nombre ?? ""),
+          peso: Number(argumentos.peso),
+          fecha: argumentos.fecha ? String(argumentos.fecha) : undefined
+        },
+        usuarioId
+      );
+
+    case "registrarEnfermedad": {
+      const nombreBovinoEnf =
+        String(argumentos.nombre_vaca ?? argumentos.nombre ?? "").trim() ||
+        nombreAnimalContexto ||
+        "";
+
+      return registrarEnfermedad(
+        {
+          nombre_vaca: nombreBovinoEnf,
+          enfermedad: String(argumentos.enfermedad ?? ""),
+          tratamiento: argumentos.tratamiento
+            ? String(argumentos.tratamiento)
+            : undefined,
+          fecha: argumentos.fecha ? String(argumentos.fecha) : undefined,
+          veterinario: argumentos.veterinario
+            ? String(argumentos.veterinario)
+            : undefined
+        },
+        usuarioId
+      );
+    }
+
+    case "transferirPropiedad": {
+      const nombreBovinoTrans =
+        String(argumentos.nombre_vaca ?? "").trim() ||
+        nombreAnimalContexto ||
+        "";
+
+      return transferirPropiedad(
+        {
+          nombre_vaca: nombreBovinoTrans,
+          dueno_nombre: argumentos.dueno_nombre
+            ? String(argumentos.dueno_nombre)
+            : undefined,
+          rancho_nombre: argumentos.rancho_nombre
+            ? String(argumentos.rancho_nombre)
+            : undefined,
+          fecha_inicio: argumentos.fecha_inicio
+            ? String(argumentos.fecha_inicio)
+            : undefined,
+          observaciones: argumentos.observaciones
+            ? String(argumentos.observaciones)
+            : undefined
+        },
+        usuarioId
+      );
+    }
+
+    default:
+      return null;
+  }
 }
 
 export default defineEventHandler(async (event) => {
@@ -431,6 +645,45 @@ export default defineEventHandler(async (event) => {
     };
   }
 
+  const inferredAction = inferWriteActionFromQuestion(
+    pregunta,
+    nombreAnimalContexto
+  );
+
+  if (inferredAction) {
+    try {
+      const resultado = await executeToolCall(
+        inferredAction.tool,
+        inferredAction.args,
+        usuarioId,
+        nombreAnimalContexto
+      );
+
+      const respuesta = buildRespuesta(
+        inferredAction.tool,
+        inferredAction.args,
+        resultado
+      );
+
+      return {
+        encontrado: true,
+        tool: inferredAction.tool,
+        argumentos: inferredAction.args,
+        resultado,
+        respuesta
+      };
+    } catch (error: any) {
+      return {
+        encontrado: true,
+        tool: inferredAction.tool,
+        argumentos: inferredAction.args,
+        resultado: null,
+        respuesta: "Ocurrió un error al ejecutar la herramienta.",
+        error: String(error?.message ?? error)
+      };
+    }
+  }
+
   let response;
 
   try {
@@ -451,16 +704,23 @@ CONSULTAS: usa getPeso, getEstado, getEdad, getVacunas, getEnfermedades, getHist
 ACCIONES (cuando el usuario pida crear, agregar, registrar o aplicar):
 - crearBovino: registrar un bovino nuevo (vaca o toro)
 - crearVacuna: agregar una vacuna al catálogo
-- aplicarVacuna: aplicar una vacuna a un bovino (usa aplicarVacuna cuando el usuario diga "aplicale", "asignale", etc.)
+- aplicarVacuna: aplicar una VACUNA a un bovino
 - registrarPeso: registrar o anotar un peso
-- registrarEnfermedad: registrar una enfermedad
+- registrarEnfermedad: registrar o aplicar una ENFERMEDAD a un bovino
+- transferirPropiedad: transferir propiedad a un dueño y/o rancho (crea dueño/rancho si no existen)
 
-Reglas para vacunas:
+Reglas para vacunas vs enfermedades (MUY IMPORTANTE):
+- Si el usuario menciona ENFERMEDAD, usa registrarEnfermedad. NUNCA uses aplicarVacuna para enfermedades.
+- Si el usuario menciona VACUNA, usa aplicarVacuna. NUNCA uses registrarEnfermedad para vacunas.
 - Si el usuario pide APLICAR una vacuna a un bovino, usa aplicarVacuna (no crearVacuna).
-- Si el mensaje incluye "(sobre el bovino X)", ese es el bovino al que debes aplicar la vacuna.
-- Si el usuario confirma registrar una vacuna en contexto de un bovino anterior, usa aplicarVacuna con ese bovino.
+- Si el mensaje incluye "(sobre el bovino X)", ese es el bovino al que debes aplicar la acción.
+- Si el usuario confirma registrar/aplicar algo en contexto de un bovino anterior, usa ese bovino del contexto.
 - NUNCA respondas con JSON en texto. Siempre invoca la herramienta correspondiente.
 - No confundas el arete con el nombre del bovino. Usa el NOMBRE del bovino, no partes del arete.
+
+Reglas para propiedad:
+- Si el usuario pide transferir propiedad, asignar dueño o asignar rancho, usa transferirPropiedad.
+- Si el dueño o rancho no existen, transferirPropiedad los crea automáticamente.
 
 Reglas estrictas para registrar bovinos:
 - NO uses frases, bromas, párrafos ni texto conversacional como datos.
@@ -516,144 +776,12 @@ Reglas generales:
   let resultado: any = null;
 
   try {
-    switch (toolName) {
-      case "getPeso":
-        resultado = await getPeso(String(argumentos.nombre ?? ""), usuarioId);
-        break;
-
-      case "getEstado":
-        resultado = await getEstado(String(argumentos.nombre ?? ""), usuarioId);
-        break;
-
-      case "getEdad":
-        resultado = await getEdad(String(argumentos.nombre ?? ""), usuarioId);
-        break;
-
-      case "getVacunas":
-        resultado = await getVacunas(String(argumentos.nombre ?? ""), usuarioId);
-        break;
-
-      case "getEnfermedades":
-        resultado = await getEnfermedades(String(argumentos.nombre ?? ""), usuarioId);
-        break;
-
-      case "getHistorial":
-        resultado = await getHistorial(String(argumentos.nombre ?? ""), usuarioId);
-        break;
-
-      case "getVenta":
-        resultado = await getVenta(String(argumentos.nombre ?? ""), usuarioId);
-        break;
-
-      case "getResumen":
-        resultado = await getResumen(String(argumentos.nombre ?? ""), usuarioId);
-        break;
-
-      case "crearBovino":
-        resultado = await crearBovino(
-          {
-            numero_arete: String(argumentos.numero_arete ?? ""),
-            nombre: String(argumentos.nombre ?? ""),
-            raza: String(argumentos.raza ?? ""),
-            sexo: String(argumentos.sexo ?? ""),
-            fecha_nacimiento: argumentos.fecha_nacimiento
-              ? String(argumentos.fecha_nacimiento)
-              : undefined,
-            estado: argumentos.estado ? String(argumentos.estado) : undefined
-          },
-          usuarioId
-        );
-        break;
-
-      case "crearVacuna": {
-        resultado = await crearVacuna(
-          {
-            nombre: String(argumentos.nombre ?? ""),
-            descripcion: argumentos.descripcion
-              ? String(argumentos.descripcion)
-              : undefined
-          },
-          usuarioId
-        );
-
-        if (resultado?.ok && nombreAnimalContexto) {
-          const applyResult = await aplicarVacuna(
-            {
-              nombre_vaca: nombreAnimalContexto,
-              vacuna_nombre: String(argumentos.nombre ?? "")
-            },
-            usuarioId
-          );
-
-          if (applyResult.ok) {
-            resultado = {
-              ...resultado,
-              aplicada: true,
-              bovino: applyResult.bovino,
-              aplicacion: applyResult.aplicacion
-            };
-          }
-        }
-        break;
-      }
-
-      case "aplicarVacuna": {
-        const nombreBovino =
-          String(argumentos.nombre_vaca ?? "").trim() ||
-          nombreAnimalContexto ||
-          "";
-
-        resultado = await aplicarVacuna(
-          {
-            nombre_vaca: nombreBovino,
-            vacuna_nombre: String(argumentos.vacuna_nombre ?? ""),
-            fecha_aplicacion: argumentos.fecha_aplicacion
-              ? String(argumentos.fecha_aplicacion)
-              : undefined,
-            veterinario: argumentos.veterinario
-              ? String(argumentos.veterinario)
-              : undefined,
-            observaciones: argumentos.observaciones
-              ? String(argumentos.observaciones)
-              : undefined
-          },
-          usuarioId
-        );
-        break;
-      }
-
-      case "registrarPeso":
-        resultado = await registrarPeso(
-          {
-            nombre: String(argumentos.nombre ?? ""),
-            peso: Number(argumentos.peso),
-            fecha: argumentos.fecha ? String(argumentos.fecha) : undefined
-          },
-          usuarioId
-        );
-        break;
-
-      case "registrarEnfermedad":
-        resultado = await registrarEnfermedad(
-          {
-            nombre: String(argumentos.nombre ?? ""),
-            enfermedad: String(argumentos.enfermedad ?? ""),
-            tratamiento: argumentos.tratamiento
-              ? String(argumentos.tratamiento)
-              : undefined,
-            fecha: argumentos.fecha ? String(argumentos.fecha) : undefined,
-            veterinario: argumentos.veterinario
-              ? String(argumentos.veterinario)
-              : undefined
-          },
-          usuarioId
-        );
-        break;
-
-      default:
-        resultado = null;
-        break;
-    }
+    resultado = await executeToolCall(
+      toolName,
+      argumentos,
+      usuarioId,
+      nombreAnimalContexto
+    );
   } catch (error: any) {
     return {
       encontrado: true,

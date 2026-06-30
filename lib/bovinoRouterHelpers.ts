@@ -93,7 +93,16 @@ export function isWriteActionBovino(text: string) {
     "vacunas",
     "peso",
     "enfermedad",
-    "enfermedades"
+    "enfermedades",
+    "dueno",
+    "dueño",
+    "duenos",
+    "dueños",
+    "rancho",
+    "ranchos",
+    "propiedad",
+    "transferencia",
+    "transferir"
   ];
 
   const hasWriteVerb = writeVerbs.some((v) => t.includes(v));

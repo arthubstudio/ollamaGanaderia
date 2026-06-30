@@ -112,12 +112,15 @@ export function isVaccineActionWithoutAnimalForBovinos(
 ) {
   const t = normalizeContextText(pregunta);
 
-  const esAccionVacuna =
-    /\b(aplica|aplicar|aplicale|registra|registrar|agrega|agregar|anade|anadir|crea|crear)\b/.test(
+  const esAccionConBovino =
+    /\b(aplica|aplicar|aplicale|registra|registrar|agrega|agregar|anade|anadir|crea|crear|asigna|asignar|asignale|transfiere|transferir)\b/.test(
       t
-    ) && /\bvacuna/.test(t);
+    ) &&
+    (/\bvacuna/.test(t) ||
+      /\benfermedad/.test(t) ||
+      /\b(dueno|dueño|rancho|propiedad|transferencia)\b/.test(t));
 
-  if (!esAccionVacuna) return false;
+  if (!esAccionConBovino) return false;
 
   const tieneAnimalExplicito = bovinosList.some((v) => {
     const nombre = normalizeContextText(v.nombre ?? "");

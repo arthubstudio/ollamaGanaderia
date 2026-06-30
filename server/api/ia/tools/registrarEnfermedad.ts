@@ -4,7 +4,8 @@ import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 import { findBovinoByNombre } from "./findBovino";
 
 export type RegistrarEnfermedadArgs = {
-  nombre: string;
+  nombre?: string;
+  nombre_vaca?: string;
   enfermedad: string;
   tratamiento?: string;
   fecha?: string;
@@ -23,18 +24,21 @@ export async function registrarEnfermedad(
     return { ok: false as const, error: "Se requiere sesión de usuario." };
   }
 
-  if (!args.nombre?.trim() || !args.enfermedad?.trim()) {
+  const nombreBovino =
+    args.nombre?.trim() || args.nombre_vaca?.trim() || "";
+
+  if (!nombreBovino || !args.enfermedad?.trim()) {
     return {
       ok: false as const,
-      error: "Indica el nombre de la vaca y la enfermedad."
+      error: "Indica el nombre del bovino y la enfermedad."
     };
   }
 
-  const vaca = await findBovinoByNombre(args.nombre.trim(), usuarioId);
+  const vaca = await findBovinoByNombre(nombreBovino, usuarioId);
   if (!vaca) {
     return {
       ok: false as const,
-      error: `No encontré la vaca "${args.nombre}" en tu cuenta.`
+      error: `No encontré el bovino "${nombreBovino}" en tu cuenta.`
     };
   }
 

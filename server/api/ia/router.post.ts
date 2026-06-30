@@ -407,6 +407,7 @@ ACCIONES (puedo hacerlo por ti):
 • Aplicar vacunas a un bovino
 • Registrar pesos
 • Registrar enfermedades
+• Transferir propiedad (dueño/rancho; los crea si no existen)
 
 Ejemplos:
 
@@ -415,6 +416,8 @@ Ejemplos:
 - Registra un bovino: arete A-101, nombre Lola, raza Holstein, hembra
 - Agrega la vacuna Antiaftosa al catálogo
 - Aplica la vacuna Antiaftosa a Lola
+- Aplícale la enfermedad tutik
+- Transfiere Lola al dueño Juan del rancho La Esperanza
 - Registra 320 kg para ToroMax
 - Registra fiebre aftosa en Meme con tratamiento reposo
 - ¿Qué recuerdas de mí?

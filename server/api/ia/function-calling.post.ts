@@ -35,6 +35,62 @@ function safeJsonParse(value: unknown): AnyObject {
   return {};
 }
 
+function parseToolCallFromContent(content: string): {
+  name: string;
+  arguments: AnyObject;
+} | null {
+  const trimmed = (content ?? "").trim();
+  if (!trimmed.startsWith("{")) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed) as AnyObject;
+    const name = String(parsed.name ?? parsed.function?.name ?? "").trim();
+    if (!name) return null;
+
+    const rawArgs =
+      parsed.parameters ?? parsed.arguments ?? parsed.function?.arguments;
+
+    return { name, arguments: safeJsonParse(rawArgs) };
+  } catch {
+    // JSON malformado que algunos modelos devuelven como texto
+  }
+
+  const nameMatch = trimmed.match(/"name"\s*:\s*"(\w+)"/);
+  if (!nameMatch?.[1]) return null;
+
+  const args: AnyObject = {};
+  const argPatterns: [string, RegExp][] = [
+    ["nombre", /"nombre"\s*:\s*\\?"([^"\\]+)/],
+    ["nombre_vaca", /"nombre_vaca"\s*:\s*\\?"([^"\\]+)/],
+    ["vacuna_nombre", /"vacuna_nombre"\s*:\s*\\?"([^"\\]+)/],
+    ["numero_arete", /"numero_arete"\s*:\s*\\?"([^"\\]+)/],
+    ["raza", /"raza"\s*:\s*\\?"([^"\\]+)/],
+    ["sexo", /"sexo"\s*:\s*\\?"([^"\\]+)/],
+    ["peso", /"peso"\s*:\s*([0-9.]+)/],
+    ["enfermedad", /"enfermedad"\s*:\s*\\?"([^"\\]+)/]
+  ];
+
+  for (const [key, pattern] of argPatterns) {
+    const match = trimmed.match(pattern);
+    if (match?.[1]) args[key] = match[1];
+  }
+
+  return { name: nameMatch[1], arguments: args };
+}
+
+function extractToolCall(response: { message?: AnyObject }) {
+  const toolCall = response.message?.tool_calls?.[0];
+  if (toolCall?.function?.name) {
+    return {
+      name: String(toolCall.function.name),
+      arguments: safeJsonParse(toolCall.function.arguments)
+    };
+  }
+
+  const content = String(response.message?.content ?? "");
+  return parseToolCallFromContent(content);
+}
+
 function yearsFromDate(dateValue: string | Date | null | undefined): number | null {
   if (!dateValue) return null;
 
@@ -158,13 +214,20 @@ Estado: ${resultado.estado ?? "N/D"}`.trim();
 
     case "crearVacuna": {
       if (!resultado?.ok) return resultado?.error ?? "No pude crear la vacuna.";
+      if (resultado?.aplicada) {
+        return "La vacuna se ha creado y se ha asignado a la vaca o bovino correspondiente.";
+      }
       const v = resultado.vacuna;
       return `Vacuna "${v.nombre}" agregada al catálogo correctamente.`;
     }
 
     case "aplicarVacuna": {
       if (!resultado?.ok) return resultado?.error ?? "No pude aplicar la vacuna.";
-      return `Vacuna "${resultado.vacuna.nombre}" aplicada a ${resultado.bovino.nombre} el ${resultado.aplicacion.fecha_aplicacion}.`;
+      if (resultado.vacunaCreada) {
+        return "La vacuna se ha creado y se ha asignado a la vaca o bovino correspondiente.";
+      }
+      const tipo = resultado.labelBovino ?? "bovino";
+      return `Vacuna "${resultado.vacuna.nombre}" aplicada a ${resultado.bovino.nombre} (${tipo}) el ${resultado.aplicacion.fecha_aplicacion}.`;
     }
 
     case "registrarPeso": {
@@ -294,11 +357,11 @@ function buildToolSchemas() {
       type: "function",
       function: {
         name: "aplicarVacuna",
-        description: "Aplica una vacuna del catálogo a una vaca",
+        description: "Aplica una vacuna del catálogo a un bovino (vaca o toro). Si la vacuna no existe, se crea automáticamente.",
         parameters: {
           type: "object",
           properties: {
-            nombre_vaca: { type: "string", description: "Nombre de la vaca" },
+            nombre_vaca: { type: "string", description: "Nombre del bovino (vaca o toro)" },
             vacuna_nombre: { type: "string", description: "Nombre de la vacuna a aplicar" },
             fecha_aplicacion: { type: "string", description: "Fecha YYYY-MM-DD (opcional, hoy por defecto)" },
             veterinario: { type: "string", description: "Nombre del veterinario (opcional)" },
@@ -353,6 +416,10 @@ export default defineEventHandler(async (event) => {
   const conversationId = body?.conversation_id ? String(body.conversation_id) : null;
   const usuarioId = body?.usuario_id ? Number(body.usuario_id) : null;
   const historial = Array.isArray(body?.historial) ? body.historial : [];
+  const animalContext = body?.animal_context ?? null;
+  const nombreAnimalContexto = animalContext?.nombre
+    ? String(animalContext.nombre).trim()
+    : null;
 
   if (!pregunta) {
     return {
@@ -384,9 +451,16 @@ CONSULTAS: usa getPeso, getEstado, getEdad, getVacunas, getEnfermedades, getHist
 ACCIONES (cuando el usuario pida crear, agregar, registrar o aplicar):
 - crearBovino: registrar un bovino nuevo (vaca o toro)
 - crearVacuna: agregar una vacuna al catálogo
-- aplicarVacuna: aplicar una vacuna a un bovino
+- aplicarVacuna: aplicar una vacuna a un bovino (usa aplicarVacuna cuando el usuario diga "aplicale", "asignale", etc.)
 - registrarPeso: registrar o anotar un peso
 - registrarEnfermedad: registrar una enfermedad
+
+Reglas para vacunas:
+- Si el usuario pide APLICAR una vacuna a un bovino, usa aplicarVacuna (no crearVacuna).
+- Si el mensaje incluye "(sobre el bovino X)", ese es el bovino al que debes aplicar la vacuna.
+- Si el usuario confirma registrar una vacuna en contexto de un bovino anterior, usa aplicarVacuna con ese bovino.
+- NUNCA respondas con JSON en texto. Siempre invoca la herramienta correspondiente.
+- No confundas el arete con el nombre del bovino. Usa el NOMBRE del bovino, no partes del arete.
 
 Reglas estrictas para registrar bovinos:
 - NO uses frases, bromas, párrafos ni texto conversacional como datos.
@@ -419,20 +493,25 @@ Reglas generales:
     };
   }
 
-  const toolCall = response.message?.tool_calls?.[0];
+  const toolCall = extractToolCall(response);
 
   if (!toolCall) {
+    const content = String(response.message?.content ?? "");
+    const pareceJsonHerramienta = /^\s*\{.*"name"\s*:\s*"/.test(content);
+
     return {
       encontrado: false,
       tool: null,
       argumentos: null,
       resultado: null,
-      respuesta: response.message?.content ?? ""
+      respuesta: pareceJsonHerramienta
+        ? "No pude completar la acción. Intenta de nuevo con el nombre del bovino y la vacuna."
+        : content
     };
   }
 
-  const toolName = toolCall.function?.name ?? null;
-  const argumentos = safeJsonParse(toolCall.function?.arguments);
+  const toolName = toolCall.name;
+  const argumentos = toolCall.arguments;
 
   let resultado: any = null;
 
@@ -486,7 +565,7 @@ Reglas generales:
         );
         break;
 
-      case "crearVacuna":
+      case "crearVacuna": {
         resultado = await crearVacuna(
           {
             nombre: String(argumentos.nombre ?? ""),
@@ -496,12 +575,37 @@ Reglas generales:
           },
           usuarioId
         );
-        break;
 
-      case "aplicarVacuna":
+        if (resultado?.ok && nombreAnimalContexto) {
+          const applyResult = await aplicarVacuna(
+            {
+              nombre_vaca: nombreAnimalContexto,
+              vacuna_nombre: String(argumentos.nombre ?? "")
+            },
+            usuarioId
+          );
+
+          if (applyResult.ok) {
+            resultado = {
+              ...resultado,
+              aplicada: true,
+              bovino: applyResult.bovino,
+              aplicacion: applyResult.aplicacion
+            };
+          }
+        }
+        break;
+      }
+
+      case "aplicarVacuna": {
+        const nombreBovino =
+          String(argumentos.nombre_vaca ?? "").trim() ||
+          nombreAnimalContexto ||
+          "";
+
         resultado = await aplicarVacuna(
           {
-            nombre_vaca: String(argumentos.nombre_vaca ?? ""),
+            nombre_vaca: nombreBovino,
             vacuna_nombre: String(argumentos.vacuna_nombre ?? ""),
             fecha_aplicacion: argumentos.fecha_aplicacion
               ? String(argumentos.fecha_aplicacion)
@@ -516,6 +620,7 @@ Reglas generales:
           usuarioId
         );
         break;
+      }
 
       case "registrarPeso":
         resultado = await registrarPeso(

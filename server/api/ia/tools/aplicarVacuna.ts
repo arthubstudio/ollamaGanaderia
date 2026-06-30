@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
+import { crearVacunaUsuario } from "~/lib/vacunaService";
 import { findBovinoByNombre } from "./findBovino";
 
 const sql = postgres(
@@ -19,6 +20,13 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function labelBovino(bovino: { nombre?: string | null; sexo?: string | null }) {
+  const sexo = String(bovino.sexo ?? "").toLowerCase();
+  if (sexo.includes("macho")) return "bovino";
+  if (sexo.includes("hembra")) return "vaca";
+  return "bovino";
+}
+
 export async function aplicarVacuna(
   args: AplicarVacunaArgs,
   usuarioId?: number | null
@@ -30,7 +38,7 @@ export async function aplicarVacuna(
   if (!args.nombre_vaca?.trim() || !args.vacuna_nombre?.trim()) {
     return {
       ok: false as const,
-      error: "Indica el nombre de la vaca y de la vacuna."
+      error: "Indica el nombre del bovino y de la vacuna."
     };
   }
 
@@ -38,10 +46,11 @@ export async function aplicarVacuna(
   if (!vaca) {
     return {
       ok: false as const,
-      error: `No encontré la vaca "${args.nombre_vaca}" en tu cuenta.`
+      error: `No encontré el bovino "${args.nombre_vaca}" en tu cuenta.`
     };
   }
 
+  let vacunaCreada = false;
   const vacunaRows = await sql`
     SELECT id, nombre
     FROM vacunas
@@ -50,14 +59,29 @@ export async function aplicarVacuna(
     LIMIT 1
   `;
 
+  let vacuna: { id: number; nombre: string };
+
   if (!vacunaRows.length) {
-    return {
-      ok: false as const,
-      error: `No encontré la vacuna "${args.vacuna_nombre}" en tu catálogo. Puedes crearla primero.`
+    const creada = await crearVacunaUsuario({
+      nombre: args.vacuna_nombre.trim(),
+      usuarioId
+    });
+
+    if (!creada.ok) {
+      return { ok: false as const, error: creada.error };
+    }
+
+    vacunaCreada = true;
+    vacuna = {
+      id: Number(creada.vacuna.id),
+      nombre: String(creada.vacuna.nombre)
+    };
+  } else {
+    vacuna = {
+      id: Number(vacunaRows[0].id),
+      nombre: String(vacunaRows[0].nombre)
     };
   }
-
-  const vacuna = vacunaRows[0];
   const fecha = args.fecha_aplicacion?.trim() || todayIsoDate();
 
   const rows = await sql`
@@ -84,6 +108,8 @@ export async function aplicarVacuna(
     ok: true as const,
     aplicacion: rows[0],
     bovino: vaca,
-    vacuna
+    vacuna,
+    vacunaCreada,
+    labelBovino: labelBovino(vaca)
   };
 }

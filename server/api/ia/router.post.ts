@@ -771,7 +771,10 @@ export default defineEventHandler(async (event) => {
             pregunta: preguntaParaAcciones,
             usuario_id: usuarioId,
             conversation_id: conversationId,
-            historial
+            historial,
+            animal_context: animalMatch
+              ? { id: animalMatch.id, nombre: animalMatch.nombre }
+              : null
           }
         });
 
@@ -1279,7 +1282,10 @@ export default defineEventHandler(async (event) => {
           pregunta: preguntaParaAcciones,
           usuario_id: usuarioId,
           conversation_id: conversationId,
-          historial
+          historial,
+          animal_context: animalMatch
+            ? { id: animalMatch.id, nombre: animalMatch.nombre }
+            : null
         }
       });
 

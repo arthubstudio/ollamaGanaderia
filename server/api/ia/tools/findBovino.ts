@@ -9,11 +9,16 @@ export async function findBovinoByNombre(
   nombre: string,
   usuarioId: number
 ) {
+  const trimmed = nombre.trim();
+
   const rows = await sql`
-    SELECT id, nombre, numero_arete
+    SELECT id, nombre, numero_arete, sexo
     FROM bovinos
-    WHERE LOWER(nombre) = LOWER(${nombre})
-      AND usuario_id = ${usuarioId}
+    WHERE usuario_id = ${usuarioId}
+      AND (
+        LOWER(nombre) = LOWER(${trimmed})
+        OR LOWER(numero_arete) = LOWER(${trimmed})
+      )
     LIMIT 1
   `;
 

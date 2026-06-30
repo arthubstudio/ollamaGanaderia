@@ -6,9 +6,19 @@ import {
   GUARDRAIL_BLOCKED_MESSAGE
 } from "~/server/lib/guardrails";
 import {
-  extraerConsultaEspecificaBovino,
-  isWriteActionBovino
+  extraerConsultaEspecificaBovino
 } from "~/lib/bovinoRouterHelpers";
+import {
+  buildClarificationList,
+  extractCountTarget,
+  greetingResponse,
+  isCountQuery,
+  isExplicitMemoryWrite,
+  isGreeting,
+  isIncompleteAction,
+  isVentaListQuery,
+  isWriteActionIntent
+} from "~/lib/iaIntentRouter";
 import {
   enrichQuestionWithAnimal,
   isContextualFollowUp,
@@ -192,7 +202,7 @@ function detectMemoryWrite(text: string) {
     };
   }
 
-  if (/^(me gusta(?:n)?|amo|adoro)\s+/.test(cleanedNormalized)) {
+  if (/^(me gusta|me gustan|amo|adoro)\s+/.test(cleanedNormalized)) {
     return {
       slot: "me_gusta",
       tipo: "gusto",
@@ -280,7 +290,8 @@ function detectMemoryWrite(text: string) {
     normalized.startsWith("recuerda que ") ||
     normalized.startsWith("recuerda ") ||
     normalized.startsWith("mi ") ||
-    normalized.startsWith("me gusta") ||
+    normalized.startsWith("me gusta ") ||
+    normalized.startsWith("me gustan ") ||
     normalized.startsWith("no me gusta") ||
     normalized.startsWith("odio") ||
     normalized.startsWith("prefiero") ||
@@ -344,7 +355,7 @@ function isMemoryQuestion(text: string) {
 }
 
 function isWriteAction(text: string) {
-  return isWriteActionBovino(text);
+  return isWriteActionIntent(text);
 }
 
 function isHelpQuestion(text: string) {
@@ -402,25 +413,26 @@ CONSULTAS:
 • Guardar y recordar memorias tuyas
 
 ACCIONES (puedo hacerlo por ti):
-• Registrar bovinos nuevos (vacas hembras o toros machos)
-• Agregar vacunas al catálogo
-• Aplicar vacunas a un bovino
+• Registrar, actualizar y eliminar bovinos (vacas hembras o toros machos)
+• Agregar, actualizar y eliminar vacunas del catálogo
+• Aplicar o quitar vacunas de un bovino
+• Registrar, actualizar y eliminar enfermedades
+• Crear, actualizar y eliminar dueños y ranchos
+• Transferir propiedad o quitar asignaciones de dueño/rancho
 • Registrar pesos
-• Registrar enfermedades
-• Transferir propiedad (dueño/rancho; los crea si no existen)
 
 Ejemplos:
 
 - ¿Cuántos bovinos tengo?
-- ¿Cuánto pesa Lola?
-- Registra un bovino: arete A-101, nombre Lola, raza Holstein, hembra
-- Agrega la vacuna Antiaftosa al catálogo
+- ¿Cuántos ranchos tengo?
+- ¿Qué vacunas tiene Lola?
+- ¿Qué vaca está lista para venta?
+- Registra un bovino: lulu, MC323, macho, Bramming
+- Crea un rancho llamado Sur Maru
+- Crea un dueño llamado Mario
 - Aplica la vacuna Antiaftosa a Lola
-- Aplícale la enfermedad tutik
-- Transfiere Lola al dueño Juan del rancho La Esperanza
-- Registra 320 kg para ToroMax
-- Registra fiebre aftosa en Meme con tratamiento reposo
-- ¿Qué recuerdas de mí?
+- Elimina una vaca (te pediré cuál si no especificas)
+- Recuerda que mi vaca favorita es Lola
 
 Nota: una vaca siempre es hembra; un toro siempre es macho. Usa datos cortos y concretos al registrar.
 `.trim();
@@ -672,10 +684,22 @@ export default defineEventHandler(async (event) => {
     }
 
     // =====================================================
+    // SALUDOS
+    // =====================================================
+
+    if (isGreeting(preguntaOriginal)) {
+      return await finish("saludo", greetingResponse(preguntaOriginal), {
+        tools: toolsExecuted
+      });
+    }
+
+    // =====================================================
     // MEMORIA ESCRITA
     // =====================================================
 
-    const memoryWrite = detectMemoryWrite(preguntaOriginal);
+    const memoryWrite = isExplicitMemoryWrite(preguntaOriginal)
+      ? detectMemoryWrite(preguntaOriginal)
+      : null;
 
     if (usuarioId && memoryWrite) {
       toolsExecuted.push({
@@ -747,6 +771,22 @@ export default defineEventHandler(async (event) => {
       animalMatch
     );
 
+    const accionIncompleta = isIncompleteAction(preguntaOriginal);
+    if (accionIncompleta === "delete" && bovinos.length) {
+      return await finish(
+        "clarificacion",
+        buildClarificationList(
+          "delete",
+          bovinos.map((v: any) => ({
+            nombre: v.nombre,
+            numero_arete: v.numero_arete,
+            extra: v.sexo
+          }))
+        ),
+        { tools: toolsExecuted }
+      );
+    }
+
     // =====================================================
     // ACCIONES DE ESCRITURA (function calling prioritario)
     // =====================================================
@@ -814,7 +854,7 @@ export default defineEventHandler(async (event) => {
 
     const consultaEspecifica = extraerConsultaEspecificaBovino(preguntaOriginal);
 
-    if (consultaEspecifica && !animalMatch) {
+    if (consultaEspecifica && !animalMatch && !isVentaListQuery(preguntaOriginal)) {
       return await finish(
         "sql",
         `No encontré ningún bovino llamado "${consultaEspecifica}" en tu cuenta.`,
@@ -1001,7 +1041,105 @@ export default defineEventHandler(async (event) => {
     if (wantsStream) sseWrite({ estado: "Buscando información..." });
 
     // =====================================================
-    // LISTA PARA VENTA
+    // CONTEOS GENERALES
+    // =====================================================
+
+    if (isCountQuery(preguntaOriginal)) {
+      const target = extractCountTarget(preguntaOriginal);
+
+      if (target === "ranchos") {
+        const result = usuarioId
+          ? await sql`SELECT COUNT(*) AS total FROM ranchos WHERE usuario_id = ${usuarioId}`
+          : await sql`SELECT COUNT(*) AS total FROM ranchos`;
+        return await finish("sql", `Tienes ${result[0].total} ranchos registrados.`, {
+          tools: toolsExecuted
+        });
+      }
+
+      if (target === "duenos") {
+        const result = usuarioId
+          ? await sql`SELECT COUNT(*) AS total FROM duenos WHERE usuario_id = ${usuarioId}`
+          : await sql`SELECT COUNT(*) AS total FROM duenos`;
+        return await finish("sql", `Tienes ${result[0].total} dueños registrados.`, {
+          tools: toolsExecuted
+        });
+      }
+
+      if (target === "vacunas_catalogo") {
+        const result = usuarioId
+          ? await sql`SELECT COUNT(*) AS total FROM vacunas WHERE usuario_id = ${usuarioId}`
+          : await sql`SELECT COUNT(*) AS total FROM vacunas`;
+        return await finish("sql", `Tienes ${result[0].total} vacunas en el catálogo.`, {
+          tools: toolsExecuted
+        });
+      }
+
+      if (target === "enfermedades") {
+        const result = usuarioId
+          ? await sql`
+              SELECT COUNT(*) AS total
+              FROM enfermedades e
+              INNER JOIN bovinos b ON b.id = e.bovino_id
+              WHERE b.usuario_id = ${usuarioId}
+            `
+          : await sql`SELECT COUNT(*) AS total FROM enfermedades`;
+        return await finish("sql", `Hay ${result[0].total} enfermedades registradas.`, {
+          tools: toolsExecuted
+        });
+      }
+    }
+
+    // =====================================================
+    // LISTA PARA VENTA (consulta general)
+    // =====================================================
+
+    if (isVentaListQuery(preguntaOriginal)) {
+      const candidatos = usuarioId
+        ? await sql`
+            SELECT id, nombre, numero_arete
+            FROM bovinos
+            WHERE usuario_id = ${usuarioId}
+              AND LOWER(COALESCE(estado, 'activa')) NOT IN ('vendida', 'vendido', 'baja')
+          `
+        : await sql`
+            SELECT id, nombre, numero_arete
+            FROM bovinos
+            WHERE LOWER(COALESCE(estado, 'activa')) NOT IN ('vendida', 'vendido', 'baja')
+          `;
+
+      const aptas: string[] = [];
+
+      for (const vaca of candidatos) {
+        const ventaResponse = await $fetch<{ respuesta?: string; lista?: boolean }>(
+          "/api/ia/venta",
+          {
+            method: "POST",
+            body: { nombre: vaca.nombre }
+          }
+        );
+
+        if (ventaResponse?.lista) {
+          aptas.push(`- ${vaca.nombre} (${vaca.numero_arete})`);
+        }
+      }
+
+      if (!aptas.length) {
+        return await finish(
+          "sql",
+          "Ningún bovino cumple actualmente los requisitos para venta.",
+          { tools: toolsExecuted }
+        );
+      }
+
+      return await finish(
+        "sql",
+        `Bovinos listos para venta:\n${aptas.join("\n")}`,
+        { tools: toolsExecuted }
+      );
+    }
+
+    // =====================================================
+    // LISTA PARA VENTA (bovino específico)
     // =====================================================
 
     if (
@@ -1075,8 +1213,12 @@ export default defineEventHandler(async (event) => {
     // =====================================================
 
     if (
-      hasWords(pregunta, ["cuantas", "hembras"]) ||
-      hasWords(pregunta, ["cuantas", "hembra"])
+      (hasWords(pregunta, ["cuantas", "hembras"]) ||
+        hasWords(pregunta, ["cuantas", "hembra"]) ||
+        hasWords(pregunta, ["cuantos", "hembras"]) ||
+        hasWords(pregunta, ["cuantos", "hembra"])) &&
+      !hasWords(pregunta, ["machos"]) &&
+      !hasWords(pregunta, ["macho"])
     ) {
       const result = usuarioId
         ? await sql`
@@ -1103,8 +1245,12 @@ export default defineEventHandler(async (event) => {
     // =====================================================
 
     if (
-      hasWords(pregunta, ["cuantos", "machos"]) ||
-      hasWords(pregunta, ["cuantos", "macho"])
+      (hasWords(pregunta, ["cuantos", "machos"]) ||
+        hasWords(pregunta, ["cuantos", "macho"]) ||
+        hasWords(pregunta, ["cuantas", "machos"]) ||
+        hasWords(pregunta, ["cuantas", "macho"])) &&
+      !hasWords(pregunta, ["hembras"]) &&
+      !hasWords(pregunta, ["hembra"])
     ) {
       const result = usuarioId
         ? await sql`

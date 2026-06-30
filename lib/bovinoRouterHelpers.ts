@@ -2,7 +2,11 @@ const STOPWORDS_NOMBRE = new Set([
   "la", "el", "los", "las", "de", "del", "y", "o", "a", "al", "en",
   "que", "se", "su", "sus", "un", "una", "unos", "unas", "mi", "mis",
   "tu", "tus", "le", "les", "lo", "es", "son", "con", "por", "para",
-  "me", "te", "nos", "si", "no", "ya", "muy", "mundo", "mundial"
+  "me", "te", "nos", "si", "no", "ya", "muy", "mundo", "mundial",
+  "esta", "este", "estos", "estas", "estan", "están",
+  "lista", "listo", "listos", "listas", "apta", "apto", "aptos", "aptas",
+  "tiene", "tienen", "puesta", "puestas", "hay", "cual", "cuales",
+  "cuanta", "cuantas", "cuanto", "cuantos"
 ]);
 
 export function normalizeRouterText(value: string) {

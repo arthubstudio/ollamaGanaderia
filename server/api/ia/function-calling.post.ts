@@ -15,7 +15,19 @@ import { aplicarVacuna } from "./tools/aplicarVacuna";
 import { registrarPeso } from "./tools/registrarPeso";
 import { registrarEnfermedad } from "./tools/registrarEnfermedad";
 import { transferirPropiedad } from "./tools/transferirPropiedad";
-import { inferWriteActionFromQuestion } from "~/lib/iaWriteActionRouter";
+import { crearDueno } from "./tools/crearDueno";
+import { crearRancho } from "./tools/crearRancho";
+import { eliminarBovino } from "./tools/eliminarBovino";
+import { eliminarEnfermedad } from "./tools/eliminarEnfermedad";
+import { eliminarVacunaAplicada } from "./tools/eliminarVacunaAplicada";
+import { eliminarVacuna } from "./tools/eliminarVacuna";
+import { eliminarDueno } from "./tools/eliminarDueno";
+import { eliminarRancho } from "./tools/eliminarRancho";
+import { actualizarEnfermedad } from "./tools/actualizarEnfermedad";
+import { actualizarBovino } from "./tools/actualizarBovino";
+import { quitarPropiedad } from "./tools/quitarPropiedad";
+import { inferActionFromQuestion } from "~/lib/iaWriteActionRouter";
+import { needsBovinoAssignment } from "~/lib/iaIntentRouter";
 
 type AnyObject = Record<string, any>;
 
@@ -270,6 +282,70 @@ Estado: ${resultado.estado ?? "N/D"}`.trim();
       return `${detalle} ${duenoTxt} ${ranchoTxt}`.trim();
     }
 
+    case "crearDueno": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude crear el dueño.";
+      if (resultado.creado) {
+        return `Dueño "${resultado.dueno.nombre}" creado correctamente en tu catálogo.`;
+      }
+      return `El dueño "${resultado.dueno.nombre}" ya existía en tu catálogo.`;
+    }
+
+    case "crearRancho": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude crear el rancho.";
+      if (resultado.creado) {
+        return `Rancho "${resultado.rancho.nombre}" creado correctamente en tu catálogo.`;
+      }
+      return `El rancho "${resultado.rancho.nombre}" ya existía en tu catálogo.`;
+    }
+
+    case "eliminarBovino": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude eliminar el bovino.";
+      return `Bovino "${resultado.bovino.nombre}" eliminado correctamente.`;
+    }
+
+    case "eliminarEnfermedad": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude eliminar la enfermedad.";
+      return `Enfermedad "${resultado.eliminada.nombre}" eliminada de ${resultado.bovino.nombre}.`;
+    }
+
+    case "eliminarVacunaAplicada": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude quitar la vacuna.";
+      return `Vacuna "${resultado.vacuna_nombre}" quitada de ${resultado.bovino.nombre}.`;
+    }
+
+    case "eliminarVacuna": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude eliminar la vacuna.";
+      return `Vacuna "${resultado.vacuna.nombre}" eliminada del catálogo.`;
+    }
+
+    case "eliminarDueno": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude eliminar el dueño.";
+      return `Dueño "${resultado.dueno.nombre}" eliminado correctamente.`;
+    }
+
+    case "eliminarRancho": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude eliminar el rancho.";
+      return `Rancho "${resultado.rancho.nombre}" eliminado correctamente.`;
+    }
+
+    case "actualizarBovino": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude actualizar el bovino.";
+      return `Bovino "${resultado.bovino.nombre}" actualizado correctamente.`;
+    }
+
+    case "actualizarEnfermedad": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude actualizar la enfermedad.";
+      return `Enfermedad de ${resultado.bovino.nombre} actualizada correctamente.`;
+    }
+
+    case "quitarPropiedad": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude quitar la asignación.";
+      const partes: string[] = [];
+      if (resultado.quito_rancho) partes.push("rancho");
+      if (resultado.quito_dueno) partes.push("dueño");
+      return `Se quitó ${partes.join(" y ")} de ${resultado.bovino.nombre}.`;
+    }
+
     default:
       return typeof resultado === "string" ? resultado : JSON.stringify(resultado, null, 2);
   }
@@ -513,7 +589,13 @@ async function executeToolCall(
         usuarioId
       );
 
-      if (resultado?.ok && nombreAnimalContexto) {
+      const debeAplicar =
+        Boolean(argumentos.aplicar_a_bovino) ||
+        (Boolean(nombreAnimalContexto) &&
+          Boolean(argumentos._pregunta) &&
+          needsBovinoAssignment(String(argumentos._pregunta)));
+
+      if (resultado?.ok && debeAplicar && nombreAnimalContexto) {
         const applyResult = await aplicarVacuna(
           {
             nombre_vaca: nombreAnimalContexto,
@@ -534,6 +616,103 @@ async function executeToolCall(
 
       return resultado;
     }
+
+    case "crearDueno":
+      return crearDueno(
+        {
+          nombre: String(argumentos.nombre ?? ""),
+          telefono: argumentos.telefono ? String(argumentos.telefono) : undefined,
+          direccion: argumentos.direccion ? String(argumentos.direccion) : undefined
+        },
+        usuarioId
+      );
+
+    case "crearRancho":
+      return crearRancho(
+        {
+          nombre: String(argumentos.nombre ?? ""),
+          ubicacion: argumentos.ubicacion ? String(argumentos.ubicacion) : undefined,
+          dueno_nombre: argumentos.dueno_nombre
+            ? String(argumentos.dueno_nombre)
+            : undefined
+        },
+        usuarioId
+      );
+
+    case "eliminarBovino":
+      return eliminarBovino({ nombre: String(argumentos.nombre ?? "") }, usuarioId);
+
+    case "eliminarEnfermedad":
+      return eliminarEnfermedad(
+        {
+          nombre_vaca: String(argumentos.nombre_vaca ?? ""),
+          enfermedad: String(argumentos.enfermedad ?? "")
+        },
+        usuarioId
+      );
+
+    case "eliminarVacunaAplicada":
+      return eliminarVacunaAplicada(
+        {
+          nombre_vaca: String(argumentos.nombre_vaca ?? ""),
+          vacuna_nombre: String(argumentos.vacuna_nombre ?? "")
+        },
+        usuarioId
+      );
+
+    case "eliminarVacuna":
+      return eliminarVacuna({ nombre: String(argumentos.nombre ?? "") }, usuarioId);
+
+    case "eliminarDueno":
+      return eliminarDueno({ nombre: String(argumentos.nombre ?? "") }, usuarioId);
+
+    case "eliminarRancho":
+      return eliminarRancho({ nombre: String(argumentos.nombre ?? "") }, usuarioId);
+
+    case "actualizarBovino":
+      return actualizarBovino(
+        {
+          nombre: String(argumentos.nombre ?? ""),
+          nuevo_nombre: argumentos.nuevo_nombre
+            ? String(argumentos.nuevo_nombre)
+            : undefined,
+          numero_arete: argumentos.numero_arete
+            ? String(argumentos.numero_arete)
+            : undefined,
+          raza: argumentos.raza ? String(argumentos.raza) : undefined,
+          sexo: argumentos.sexo ? String(argumentos.sexo) : undefined,
+          estado: argumentos.estado ? String(argumentos.estado) : undefined
+        },
+        usuarioId
+      );
+
+    case "actualizarEnfermedad":
+      return actualizarEnfermedad(
+        {
+          nombre_vaca: String(argumentos.nombre_vaca ?? ""),
+          enfermedad: String(argumentos.enfermedad ?? ""),
+          nuevo_nombre: argumentos.nuevo_nombre
+            ? String(argumentos.nuevo_nombre)
+            : undefined,
+          tratamiento: argumentos.tratamiento
+            ? String(argumentos.tratamiento)
+            : undefined,
+          veterinario: argumentos.veterinario
+            ? String(argumentos.veterinario)
+            : undefined
+        },
+        usuarioId
+      );
+
+    case "quitarPropiedad":
+      return quitarPropiedad(
+        {
+          nombre_vaca: String(argumentos.nombre_vaca ?? ""),
+          quitar_rancho: argumentos.quitar_rancho !== false,
+          quitar_dueno: argumentos.quitar_dueno !== false
+        },
+        usuarioId
+      );
 
     case "aplicarVacuna": {
       const nombreBovino =
@@ -645,7 +824,7 @@ export default defineEventHandler(async (event) => {
     };
   }
 
-  const inferredAction = inferWriteActionFromQuestion(
+  const inferredAction = inferActionFromQuestion(
     pregunta,
     nombreAnimalContexto
   );
@@ -699,28 +878,33 @@ Terminología:
 - "Bovinos" incluye vacas (hembras) y toros (machos).
 - Una vaca SIEMPRE es hembra. Un toro SIEMPRE es macho. No aceptes contradicciones.
 
-CONSULTAS: usa getPeso, getEstado, getEdad, getVacunas, getEnfermedades, getHistorial, getVenta, getResumen.
+CONSULTAS (cuando el usuario PREGUNTA, no cuando pide crear/aplicar):
+- getVacunas: "qué vacunas tiene", "vacunas de Lola"
+- getEnfermedades, getPeso, getEdad, getHistorial, getVenta, getResumen
+- Si el usuario pregunta, NUNCA crees ni modifiques registros.
 
-ACCIONES (cuando el usuario pida crear, agregar, registrar o aplicar):
-- crearBovino: registrar un bovino nuevo (vaca o toro)
-- crearVacuna: agregar una vacuna al catálogo
-- aplicarVacuna: aplicar una VACUNA a un bovino
-- registrarPeso: registrar o anotar un peso
-- registrarEnfermedad: registrar o aplicar una ENFERMEDAD a un bovino
-- transferirPropiedad: transferir propiedad a un dueño y/o rancho (crea dueño/rancho si no existen)
+ACCIONES DE CREACIÓN EN CATÁLOGO (sin asignar a bovino):
+- crearDueno: solo crear dueño en catálogo
+- crearRancho: solo crear rancho en catálogo
+- crearVacuna: solo agregar vacuna al catálogo
 
-Reglas para vacunas vs enfermedades (MUY IMPORTANTE):
-- Si el usuario menciona ENFERMEDAD, usa registrarEnfermedad. NUNCA uses aplicarVacuna para enfermedades.
-- Si el usuario menciona VACUNA, usa aplicarVacuna. NUNCA uses registrarEnfermedad para vacunas.
+ACCIONES CON ASIGNACIÓN A BOVINO:
+- aplicarVacuna, registrarEnfermedad, transferirPropiedad
+- Solo usa estas si el usuario pide explícitamente aplicar, asignar o transferir a un bovino.
+
+ACCIONES CRUD:
+- crearBovino, actualizarBovino, eliminarBovino
+- registrarEnfermedad, actualizarEnfermedad, eliminarEnfermedad
+- aplicarVacuna, eliminarVacunaAplicada, eliminarVacuna
+- eliminarDueno, eliminarRancho, quitarPropiedad
+- registrarPeso
+
+Reglas para vacunas vs enfermedades vs consultas (MUY IMPORTANTE):
+- PREGUNTA sobre vacunas → getVacunas. ACCIÓN sobre vacunas → aplicarVacuna o crearVacuna.
+- Si el usuario menciona ENFERMEDAD para registrar → registrarEnfermedad. Para consultar → getEnfermedades.
 - Si el usuario pide APLICAR una vacuna a un bovino, usa aplicarVacuna (no crearVacuna).
-- Si el mensaje incluye "(sobre el bovino X)", ese es el bovino al que debes aplicar la acción.
-- Si el usuario confirma registrar/aplicar algo en contexto de un bovino anterior, usa ese bovino del contexto.
-- NUNCA respondas con JSON en texto. Siempre invoca la herramienta correspondiente.
-- No confundas el arete con el nombre del bovino. Usa el NOMBRE del bovino, no partes del arete.
-
-Reglas para propiedad:
-- Si el usuario pide transferir propiedad, asignar dueño o asignar rancho, usa transferirPropiedad.
-- Si el dueño o rancho no existen, transferirPropiedad los crea automáticamente.
+- crearDueno/crearRancho NO asignan a bovinos. transferirPropiedad SÍ asigna a un bovino.
+- Si falta el nombre del bovino para eliminar/actualizar, pregunta cuál con una lista.
 
 Reglas estrictas para registrar bovinos:
 - NO uses frases, bromas, párrafos ni texto conversacional como datos.

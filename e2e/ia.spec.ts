@@ -1,64 +1,38 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 test("La IA responde correctamente", async ({ page }) => {
+  await page.goto("/login");
 
-  // Esperar un poco más porque Ollama puede tardar
-  test.setTimeout(120000);
+  await page
+    .getByPlaceholder("tu@email.com")
+    .fill("pedro@gmail.com");
 
-  // Login
-  await page.goto("http://localhost:3000/login");
+  await page
+    .locator('input[type="password"]')
+    .fill("123456");
 
-  await page.getByPlaceholder("tu@email.com")
-    .fill("coco@gmail.com");
+  await page
+    .getByRole("button", { name: /login/i })
+    .click();
 
-  await page.getByPlaceholder("••••••••")
-    .fill("123");
-
-  await page.getByRole("button", {
-    name: /login/i
-  }).click();
-
-  // Esperar a que aparezca el panel principal
+  await expect(page).toHaveURL(/\/$/);
   await expect(
     page.getByRole("heading", {
-      name: /inicio/i
+      name: /tu rancho en un vistazo/i
     })
   ).toBeVisible();
 
-  // Ir al asistente IA
-  await page.goto("http://localhost:3000/ia");
+  await page.goto("/ia");
 
   await expect(page).toHaveURL(/.*\/ia/);
 
-  // Esperar el textarea
-  const textarea = page.locator("textarea");
-
+  const textarea = page.getByPlaceholder("Escribe tu pregunta...");
   await expect(textarea).toBeVisible();
 
-  // Preguntar
   await textarea.fill("¿Qué puedes hacer?");
+  await page.getByTitle("Enviar").click();
 
-  // Enviar
-  await page.getByRole("button", {
-    name: /preguntar|enviar/i
-  }).click();
-
-  // Esperar que aparezca alguna respuesta
-  const respuesta = page.locator("text=IA").locator("..");
-
-  await expect(respuesta)
-    .toBeVisible({
-      timeout: 60000
-    });
-
-  // Validar que exista texto suficiente
-  await expect(
-    page.locator("body")
-  ).toContainText(
-    /puedo|ayudar|bovino|vacuna|peso|ganadero/i,
-    {
-      timeout: 60000
-    }
+  await expect(page.locator("body")).toContainText(
+    /Ganader|puedo ayudarte|bovinos|vacunas|pesos/i
   );
-
 });

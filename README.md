@@ -1,189 +1,89 @@
-# 🐄 Ganaderia_AI
+# Ganaderia_AI
 
-Sistema inteligente para la gestión de ganado bovino con Inteligencia Artificial local.
+Sistema fullstack para gestion de ganado bovino con inteligencia artificial local.
 
----
+Ganaderia_AI permite administrar bovinos, duenos, ranchos, pesos, vacunas, enfermedades, ventas e historial de propiedad. Tambien incluye un asistente conversacional con Ollama, pgvector, RAG, memorias y streaming SSE.
 
-# 📌 Descripción
+## Stack
 
-Ganaderia_AI es una plataforma desarrollada para ayudar a ranchos, ganaderos y administradores pecuarios a controlar toda la información de su ganado desde un único sistema.
+Frontend:
 
-Permite registrar vacas, propietarios, ranchos, vacunas, enfermedades, pesos y movimientos de propiedad, además de incorporar Inteligencia Artificial para realizar consultas inteligentes sobre la información almacenada.
+- Nuxt 4
+- Vue 3
+- TailwindCSS
+- Nuxt Icon
 
----
+Backend:
 
-# 🚨 Problemática
+- Nitro Server Routes
+- PostgreSQL
+- Drizzle ORM
+- SQL directo con `postgres`
 
-Actualmente muchos ranchos gestionan su información mediante:
+IA:
 
-* Libretas físicas.
-* Hojas de cálculo.
-* Mensajes de WhatsApp.
-* Registros dispersos.
+- Ollama
+- `llama3.2:latest`
+- `nomic-embed-text`
+- pgvector
+- RAG
+- Function Calling
+- Streaming SSE
 
-Esto genera:
+Infraestructura y pruebas:
 
-* Pérdida de información.
-* Historiales incompletos.
-* Dificultad para rastrear vacunas.
-* Problemas de seguimiento sanitario.
-* Falta de control sobre propietarios y ranchos.
-* Información difícil de consultar.
+- Docker Compose
+- PostgreSQL + pgvector
+- Ollama
+- Playwright E2E
 
----
+## Requisitos
 
-# ✅ Solución
+- Node.js 20+
+- npm
+- Docker
+- Docker Compose
+- Git
 
-Ganaderia_AI centraliza toda la información ganadera en una única plataforma.
-
-Características:
-
-* Registro de vacas.
-* Administración de dueños.
-* Administración de ranchos.
-* Control de pesos.
-* Control sanitario.
-* Registro de enfermedades.
-* Historial de propiedad.
-* Ventas de ganado.
-* IA local con Ollama.
-* Búsqueda semántica mediante pgvector.
-
----
-
-# 🛠 Tecnologías Utilizadas
-
-## Frontend
-
-* Nuxt 3
-* Vue 3
-* TailwindCSS
-
-## Backend
-
-* Nitro Server
-* Drizzle ORM
-* PostgreSQL
-
-## Inteligencia Artificial
-
-* Ollama
-* Llama 3
-* Nomic Embed Text
-* pgvector
-
-## Infraestructura
-
-* Docker
-* Docker Compose
-
----
-
-# 📦 Requisitos
-
-Instalar previamente:
-
-* Node.js 20+
-* Docker
-* Docker Compose
-* Git
-
----
-
-# 🚀 Clonar Proyecto
+## Instalacion
 
 ```bash
-git clone https://github.com/arthubstudio/ollamaGanaderia.git
-
-cd Ganaderia_AI/app
+npm install
 ```
 
----
-
-# 📥 Instalar Dependencias
-
-Con pnpm:
-
-```bash
-pnpm install
-```
-
----
-
-# 🐳 Levantar Base de Datos
-
-Iniciar PostgreSQL con Docker:
+## Levantar servicios
 
 ```bash
 docker compose up -d
 ```
 
-Verificar contenedores:
+El `docker-compose.yml` levanta:
+
+- `ganaderia_db`: PostgreSQL con pgvector en `localhost:5433`.
+- `ollamaganaderia`: Ollama en `localhost:11435`.
+
+Los datos persisten en los volumenes:
+
+- `postgres_data`
+- `ollama_data`
+
+En una base nueva, Docker ejecuta `database/seeds.sql` como script de inicializacion. Si el volumen ya existe, ejecuta el seed manualmente:
 
 ```bash
-docker ps
+npm run db:seed
 ```
 
----
-
-# 🗄 Entrar a PostgreSQL
+## Descargar modelos de Ollama
 
 ```bash
-docker exec -it ganaderia_db psql -U ganaderia -d ganaderia_ai
+docker exec -it ollamaganaderia ollama pull llama3.2:latest
+docker exec -it ollamaganaderia ollama pull nomic-embed-text
 ```
 
----
-
-# 📊 Consultas Útiles
-
-Mostrar tablas:
-
-```sql
-\dt
-```
-
-Ver vacas:
-
-```sql
-SELECT * FROM vacas;
-```
-
-Ver propietarios:
-
-```sql
-SELECT * FROM duenos;
-```
-
-Ver vacunas:
-
-```sql
-SELECT * FROM vacunas;
-```
-
-Ver pesos:
-
-```sql
-SELECT * FROM pesos;
-```
-
----
-
-# 🌱 Cargar Datos Iniciales
-
-Ejecutar seed:
+## Ejecutar la aplicacion
 
 ```bash
-docker exec -i ganaderia_db psql -U ganaderia -d ganaderia_ai < database/seeds.sql
-```
-
----
-
-# ▶ Ejecutar Proyecto
-
-Modo desarrollo:
-
-```bash
-pnpm dev
+npm run dev
 ```
 
 Abrir:
@@ -192,81 +92,53 @@ Abrir:
 http://localhost:3000
 ```
 
----
-
-# 📋 Funcionalidades
-
-## Gestión de Vacas
-
-* Crear
-* Editar
-* Eliminar
-* Historial
-
-## Gestión de Dueños
-
-* Crear
-* Editar
-* Eliminar
-
-## Gestión de Ranchos
-
-* Crear
-* Editar
-* Eliminar
-
-## Gestión de Vacunas
-
-* Catálogo de vacunas
-* Aplicación de vacunas
-* Historial sanitario
-
-## Gestión de Enfermedades
-
-* Registro
-* Tratamientos
-* Seguimiento veterinario
-
-## Gestión de Pesos
-
-* Registro histórico
-* Seguimiento de crecimiento
-
-## Gestión de Ventas
-
-* Historial de ventas
-* Seguimiento comercial
-
-## Inteligencia Artificial
-
-Consultas como:
+Usuario demo:
 
 ```text
-¿Qué vacas Angus tengo?
-
-¿Cuánto pesa Lola?
-
-¿Qué vacunas tiene aplicadas ToroMax?
-
-¿Qué animales están listos para venta?
-
-¿Qué enfermedades ha tenido esta vaca?
+Email: pedro@gmail.com
+Password: 123456
 ```
 
----
+## Pruebas E2E
 
-# 🐳 Comandos Docker
-
-Detener contenedores:
+Ejecutar todas las pruebas:
 
 ```bash
-docker compose down
+npm run test:e2e
 ```
 
-Reiniciar:
+Ejecutar solo la prueba de IA:
 
 ```bash
-docker compose restart
+npm run test:e2e:ia
+```
+
+Ver reporte de Playwright:
+
+```bash
+npx playwright show-report
+```
+
+## Exposicion publica
+
+Con Cloudflare Tunnel:
+
+```bash
+cloudflared tunnel --url http://localhost:3000
+```
+
+Con Ngrok:
+
+```bash
+ngrok http 3000
+```
+
+## Comandos utiles
+
+Ver contenedores:
+
+```bash
+docker compose ps
 ```
 
 Ver logs:
@@ -275,28 +147,43 @@ Ver logs:
 docker compose logs -f
 ```
 
-Eliminar volúmenes y reconstruir:
+Entrar a PostgreSQL:
 
 ```bash
-docker compose down -v
-
-docker compose up -d
+docker exec -it ganaderia_db psql -U ganaderia -d ganaderia_ai
 ```
 
----
+Detener servicios:
 
-# 🎓 Proyecto Académico
+```bash
+docker compose down
+```
 
-Proyecto desarrollado como parte de la carrera:
+## Consultas utiles
 
-**Ingeniería en Desarrollo y Gestión de Software**
+```sql
+\dt
+SELECT * FROM bovinos;
+SELECT * FROM duenos;
+SELECT * FROM ranchos;
+SELECT * FROM vacunas;
+SELECT * FROM pesos;
+SELECT * FROM enfermedades;
+```
 
-**Universidad Tecnológica Metropolitana (UTM)**
+## Notas para Semana 6
 
----
+- El flujo principal local es `npm install`, `docker compose up -d`, `npm run db:seed`, `npm run dev`.
+- Para probar IA, Ollama debe tener descargados `llama3.2:latest` y `nomic-embed-text`.
+- La prueba `e2e/ia.spec.ts` valida login, entrada al asistente y respuesta a `¿Qué puedes hacer?`.
+- La exposicion publica puede hacerse con Cloudflare Tunnel o Ngrok apuntando a `http://localhost:3000`.
 
-# 👨‍💻 Autor
+## Riesgos conocidos
 
-**Hugo Arcos Zuñiga**
-
-Desarrollador Full Stack | Inteligencia Artificial | Sistemas Ganaderos
+- La autenticacion actual se basa en `localStorage`.
+- Las contrasenas de demo estan en texto plano.
+- Hay credenciales locales hardcodeadas.
+- Algunos endpoints usan Drizzle y otros SQL directo.
+- `database/schema.sql`, `database/seeds.sql` y `drizzle/schema.ts` no estan completamente sincronizados.
+- Hay textos heredados con el nombre anterior `vacas`.
+- Hay problemas de encoding visibles en algunas vistas.

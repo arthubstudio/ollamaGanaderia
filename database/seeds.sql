@@ -278,7 +278,7 @@ VALUES
 (2, 2, 'Rabia', 'Vacuna contra rabia'),
 (3, 2, 'Clostridiales', 'Vacuna clostridial'),
 (4, 2, 'Complejo Respiratorio', 'Vacuna respiratoria')
-ON CONFLICT (nombre) DO NOTHING;
+ON CONFLICT (usuario_id, nombre) DO NOTHING;
 
 INSERT INTO vacuna_aplicada
 (id, bovino_id, vacuna_id, fecha_aplicacion, veterinario, observaciones)

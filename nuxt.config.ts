@@ -9,5 +9,10 @@ export default defineNuxtConfig({
   routeRules: {
     "/vacas": { redirect: "/bovinos" },
     "/vacas/**": { redirect: "/bovinos/**" }
+  },
+  vite: {
+    server: {
+      allowedHosts: true
+    }
   }
 })

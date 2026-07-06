@@ -11,6 +11,13 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database/seeds.sql:/docker-entrypoint-initdb.d/001-seeds.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ganaderia -d ganaderia_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   ollama:
     image: ollama/ollama:latest
@@ -20,6 +27,12 @@ services:
       - "127.0.0.1:11435:11434"
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
 volumes:
   postgres_data:

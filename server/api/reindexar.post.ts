@@ -12,7 +12,7 @@ const sql = postgres(
 
 export default defineEventHandler(async () => {
 
-  const vacas =
+  const bovinos =
     await sql`
 
       SELECT id
@@ -20,10 +20,10 @@ export default defineEventHandler(async () => {
 
     `;
 
-  for (const vaca of vacas) {
+  for (const bovino of bovinos) {
 
     await rebuildBovinoContext(
-      vaca.id
+      bovino.id
     );
 
   }

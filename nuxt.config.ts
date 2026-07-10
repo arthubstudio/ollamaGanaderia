@@ -2,6 +2,12 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
+  runtimeConfig: {
+    sessionSecret: process.env.NUXT_SESSION_SECRET || "ganaderia-ai-local-dev-change-me"
+  },
+  nitro: {
+    errorHandler: "~/server/error-handler.ts"
+  },
   modules: [
     "@nuxtjs/tailwindcss",
     "@nuxt/icon"

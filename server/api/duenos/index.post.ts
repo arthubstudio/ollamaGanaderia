@@ -1,31 +1,15 @@
-import { db } from "~/lib/db";
-import { duenos } from "~/drizzle/schema";
+import { sql } from "~/lib/db";
+import { optionalText, requiredText, runApi } from "~/server/utils/api";
+import { requireUserId } from "~/server/utils/session";
 
-export default defineEventHandler(async (event) => {
-
-  const body =
-    await readBody(event);
-
-  const result =
-    await db
-      .insert(duenos)
-      .values({
-
-        usuario_id:
-          body.usuario_id,
-
-        nombre:
-          body.nombre,
-
-        telefono:
-          body.telefono,
-
-        direccion:
-          body.direccion
-
-      })
-      .returning();
-
-  return result[0];
-
-});
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  const body = await readBody(event);
+  const rows = await sql`
+    INSERT INTO duenos (usuario_id, nombre, telefono, direccion)
+    VALUES (${userId}, ${requiredText(body?.nombre, "nombre", 100)},
+      ${optionalText(body?.telefono, 50)}, ${optionalText(body?.direccion)})
+    RETURNING *
+  `;
+  return rows[0];
+}));

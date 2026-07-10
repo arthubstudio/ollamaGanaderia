@@ -9,6 +9,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "test": "node --test tests/iaActionPlanner.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ia": "playwright test e2e/ia.spec.ts"
   },

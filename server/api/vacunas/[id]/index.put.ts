@@ -1,66 +1,20 @@
-import { db } from "~/lib/db";
-import { vacunas } from "~/drizzle/schema";
-import { eq } from "drizzle-orm";
+import { sql } from "~/lib/db";
 import { findVacunaByNombreUsuario, mensajeVacunaYaExiste } from "~/lib/vacunaService";
-
-export default defineEventHandler(async (event) => {
-  const id = Number(event.context.params?.id);
+import { apiError, optionalText, parseId, requiredText, runApi } from "~/server/utils/api";
+import { requireOwnedVacuna } from "~/server/utils/ownership";
+import { requireUserId } from "~/server/utils/session";
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  const id = parseId(event.context.params?.id);
   const body = await readBody(event);
-  const nombre = String(body.nombre ?? "").trim();
-
-  if (!nombre) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "El nombre de la vacuna es obligatorio."
-    });
+  await requireOwnedVacuna(id, userId);
+  const nombre = requiredText(body?.nombre, "nombre", 100);
+  if (await findVacunaByNombreUsuario(nombre, userId, id)) {
+    apiError({ statusCode: 409, code: "DUPLICATE", message: mensajeVacunaYaExiste(nombre) });
   }
-
-  const actual = await db
-    .select()
-    .from(vacunas)
-    .where(eq(vacunas.id, id))
-    .limit(1);
-
-  const vacunaActual = actual[0];
-  if (!vacunaActual?.usuario_id) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: "Vacuna no encontrada."
-    });
-  }
-
-  const duplicada = await findVacunaByNombreUsuario(
-    nombre,
-    vacunaActual.usuario_id,
-    id
-  );
-
-  if (duplicada) {
-    throw createError({
-      statusCode: 409,
-      statusMessage: mensajeVacunaYaExiste(nombre)
-    });
-  }
-
-  try {
-    const result = await db
-      .update(vacunas)
-      .set({
-        nombre,
-        descripcion: body.descripcion ?? null
-      })
-      .where(eq(vacunas.id, id))
-      .returning();
-
-    return result[0];
-  } catch (error: any) {
-    if (error?.code === "23505") {
-      throw createError({
-        statusCode: 409,
-        statusMessage: mensajeVacunaYaExiste(nombre)
-      });
-    }
-
-    throw error;
-  }
-});
+  const rows = await sql`
+    UPDATE vacunas SET nombre = ${nombre}, descripcion = ${optionalText(body?.descripcion)}
+    WHERE id = ${id} AND usuario_id = ${userId} RETURNING *
+  `;
+  return rows[0];
+}));

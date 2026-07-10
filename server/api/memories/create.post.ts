@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { generarEmbeddingSafe } from "~/lib/embeddings";
+import { requireUserId } from "~/server/utils/session";
 
 const sql = postgres(
   "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
@@ -206,17 +207,14 @@ function inferMemoryRecord(
 export default defineEventHandler(async (event) => {
   const body = (await readBody(event)) as CreateMemoryBody;
 
-  const usuarioId =
-    body.usuario_id != null
-      ? Number(body.usuario_id)
-      : null;
+  const usuarioId = requireUserId(event);
 
   const contenido = (body.contenido ?? "").trim();
 
-  if (!usuarioId || !contenido) {
+  if (!contenido) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Faltan usuario_id o contenido"
+      statusMessage: "Falta contenido"
     });
   }
 

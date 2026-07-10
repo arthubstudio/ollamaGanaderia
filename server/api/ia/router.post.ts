@@ -1,4 +1,4 @@
-import postgres from "postgres";
+import { sql } from "~/lib/db";
 import { ollama } from "~/lib/ollama";
 import { setResponseHeader } from "h3";
 import {
@@ -24,13 +24,16 @@ import {
   isContextualFollowUp,
   resolveAnimalFromContext
 } from "~/lib/conversationContext";
-
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
-);
+import { planIaTurn } from "~/lib/iaActionPlanner.js";
+import {
+  clearPendingIaAction,
+  getIaConversationContext,
+  getPendingIaAction,
+  setIaConversationBovino,
+  setPendingIaAction
+} from "~/lib/iaConversationState.js";
+import { apiError } from "~/server/utils/api";
+import { requireUserId } from "~/server/utils/session";
 
 type ChatBody = {
   pregunta?: string;
@@ -501,16 +504,25 @@ export default defineEventHandler(async (event) => {
       ? String(body.conversation_id)
       : null;
 
-  const usuarioId =
-    body.usuario_id != null
-      ? Number(body.usuario_id)
-      : null;
+  const usuarioId = requireUserId(event);
+
+  if (conversationId) {
+    const owner = await sql`
+      SELECT id FROM conversations
+      WHERE id = ${conversationId} AND usuario_id = ${usuarioId}
+      LIMIT 1
+    `;
+    if (!owner.length) {
+      apiError({ statusCode: 404, code: "NOT_FOUND", message: "Conversacion no encontrada." });
+    }
+  }
 
   const preguntaOriginal = body.pregunta ?? "";
   const pregunta = normalizeText(preguntaOriginal);
   const wantsStream = Boolean(body.stream);
   const sessionId = conversationId ?? `user:${usuarioId ?? "anonymous"}`;
   const toolsExecuted: ToolExecution[] = [];
+  let routerStage = "initialize";
 
   if (wantsStream) {
     setResponseHeader(event, "Content-Type", "text/event-stream; charset=utf-8");
@@ -656,7 +668,263 @@ export default defineEventHandler(async (event) => {
     return await streamTextAndFinish(tipo, texto, meta);
   }
 
+  async function runPlannerQuery(query: any) {
+    toolsExecuted.push({
+      name: "ia.planner.query",
+      status: "SUCCESS",
+      params: query
+    });
+
+    if (query.type === "count") {
+      const target = query.target;
+      let rows: any[];
+
+      if (target === "vacas") {
+        rows = await sql`
+          SELECT COUNT(*) AS total
+          FROM bovinos
+          WHERE usuario_id = ${usuarioId}
+            AND LOWER(sexo) = 'hembra'
+        `;
+        return await finish("sql", `Tienes ${rows[0].total} vacas registradas.`, {
+          tools: toolsExecuted
+        });
+      }
+
+      if (target === "toros") {
+        rows = await sql`
+          SELECT COUNT(*) AS total
+          FROM bovinos
+          WHERE usuario_id = ${usuarioId}
+            AND LOWER(sexo) = 'macho'
+        `;
+        return await finish("sql", `Tienes ${rows[0].total} toros registrados.`, {
+          tools: toolsExecuted
+        });
+      }
+
+      const tableByTarget: Record<string, string> = {
+        bovinos: "bovinos",
+        ranchos: "ranchos",
+        duenos: "duenos",
+        vacunas_catalogo: "vacunas"
+      };
+
+      const table = tableByTarget[target] ?? "bovinos";
+      rows = await sql.unsafe(
+        `SELECT COUNT(*) AS total FROM ${table} WHERE usuario_id = $1`,
+        [usuarioId]
+      );
+
+      const labels: Record<string, string> = {
+        bovinos: "bovinos registrados",
+        ranchos: "ranchos registrados",
+        duenos: "duenos registrados",
+        vacunas_catalogo: "vacunas en tu catalogo"
+      };
+
+      return await finish("sql", `Tienes ${rows[0].total} ${labels[target] ?? "registros"}.`, {
+        tools: toolsExecuted
+      });
+    }
+
+    if (query.type === "list") {
+      if (query.target === "vacunas_catalogo") {
+        const rows = await sql`
+          SELECT nombre, descripcion
+          FROM vacunas
+          WHERE usuario_id = ${usuarioId}
+          ORDER BY nombre ASC
+        `;
+
+        if (!rows.length) {
+          return await finish("sql", "Actualmente no tienes vacunas registradas en el catalogo.", {
+            tools: toolsExecuted
+          });
+        }
+
+        const texto = rows.map((v: any) => `- ${v.nombre}`).join("\n");
+        return await finish("sql", `Vacunas en tu catalogo:\n${texto}`, {
+          tools: toolsExecuted
+        });
+      }
+
+      if (query.target === "bovinos") {
+        const rows = await sql`
+          SELECT nombre, numero_arete, raza, sexo, estado
+          FROM bovinos
+          WHERE usuario_id = ${usuarioId}
+          ORDER BY nombre ASC
+        `;
+
+        if (!rows.length) {
+          return await finish("sql", "No tienes bovinos registrados.", {
+            tools: toolsExecuted
+          });
+        }
+
+        const texto = rows
+          .map((v: any) => `- ${v.nombre} (${v.numero_arete}) | ${v.sexo} | ${v.raza}`)
+          .join("\n");
+        return await finish("sql", `Bovinos registrados:\n${texto}`, {
+          tools: toolsExecuted
+        });
+      }
+
+      if (query.target === "ranchos") {
+        const rows = await sql`
+          SELECT nombre, ubicacion
+          FROM ranchos
+          WHERE usuario_id = ${usuarioId}
+          ORDER BY nombre ASC
+        `;
+
+        if (!rows.length) {
+          return await finish("sql", "No tienes ranchos registrados.", {
+            tools: toolsExecuted
+          });
+        }
+
+        return await finish("sql", `Ranchos registrados:\n${rows.map((r: any) => `- ${r.nombre}`).join("\n")}`, {
+          tools: toolsExecuted
+        });
+      }
+
+      if (query.target === "duenos") {
+        const rows = await sql`
+          SELECT nombre, telefono
+          FROM duenos
+          WHERE usuario_id = ${usuarioId}
+          ORDER BY nombre ASC
+        `;
+
+        if (!rows.length) {
+          return await finish("sql", "No tienes duenos registrados.", {
+            tools: toolsExecuted
+          });
+        }
+
+        return await finish("sql", `Duenos registrados:\n${rows.map((d: any) => `- ${d.nombre}`).join("\n")}`, {
+          tools: toolsExecuted
+        });
+      }
+
+      if (query.target === "venta_listos") {
+        return await finish("sql", "No puedo listar bovinos listos para venta porque no hay una regla de peso minimo configurada.", {
+          tools: toolsExecuted
+        });
+      }
+    }
+
+    if (query.type === "readiness" && query.target === "venta_estado") {
+      const nombre = String(query.args?.nombre ?? "").trim();
+      if (!nombre) {
+        return await finish("sql", "¿De que bovino deseas verificar la venta?", { tools: toolsExecuted });
+      }
+
+      const rows = await sql`
+        SELECT id, nombre, numero_arete FROM bovinos
+        WHERE usuario_id = ${usuarioId} AND LOWER(nombre) = LOWER(${nombre})
+        LIMIT 1
+      `;
+      if (!rows.length) {
+        return await finish("sql", `No encontre el bovino "${nombre}" en tu cuenta.`, { tools: toolsExecuted });
+      }
+
+      const bovino = rows[0];
+      setIaConversationBovino(conversationId, usuarioId, bovino, "verificar_venta");
+      const pesos = await sql`
+        SELECT peso, fecha FROM pesos WHERE bovino_id = ${bovino.id}
+        ORDER BY fecha DESC NULLS LAST, id DESC LIMIT 1
+      `;
+      if (!pesos.length) {
+        return await finish("sql", `No puedo determinar si ${bovino.nombre} esta lista para venta porque no tiene un peso registrado.`, { tools: toolsExecuted });
+      }
+
+      return await finish("sql", `${bovino.nombre} tiene un peso registrado de ${pesos[0].peso} kg, pero no puedo determinar si esta lista para venta porque no hay una regla de peso minimo configurada.`, { tools: toolsExecuted });
+    }
+
+    if (query.type === "search" && query.target === "bovino_arete") {
+      if (!query.args?.numero_arete) {
+        return await finish("sql", "Indica el numero de arete que deseas buscar.", {
+          tools: toolsExecuted
+        });
+      }
+
+      const rows = await sql`
+        SELECT nombre, numero_arete, raza, sexo, estado
+        FROM bovinos
+        WHERE usuario_id = ${usuarioId}
+          AND LOWER(numero_arete) = LOWER(${query.args.numero_arete})
+        LIMIT 5
+      `;
+
+      if (!rows.length) {
+        return await finish("sql", `No encontre bovinos con arete ${query.args.numero_arete}.`, {
+          tools: toolsExecuted
+        });
+      }
+
+      const texto = rows
+        .map((v: any) => `- ${v.nombre} (${v.numero_arete}) | ${v.sexo} | ${v.raza} | ${v.estado ?? "activa"}`)
+        .join("\n");
+      return await finish("sql", `Resultado de busqueda:\n${texto}`, {
+        tools: toolsExecuted
+      });
+    }
+
+    return null;
+  }
+
+  async function executePlannerAction(tool: string, args: Record<string, unknown>) {
+    toolsExecuted.push({
+      name: "ia.planner.action",
+      status: "SUCCESS",
+      params: {
+        tool,
+        args
+      }
+    });
+
+    try {
+      const response: any = await event.$fetch("/api/ia/function-calling", {
+        method: "POST",
+        body: {
+          pregunta: preguntaOriginal,
+          usuario_id: usuarioId,
+          conversation_id: conversationId,
+          direct_tool: tool,
+          direct_args: args
+        }
+      });
+
+      toolsExecuted[toolsExecuted.length - 1].result = response;
+      const resultBovino = response?.resultado?.bovino;
+      if (resultBovino?.id && resultBovino?.nombre) {
+        setIaConversationBovino(conversationId, usuarioId, resultBovino, tool);
+      }
+      return await finish("function-calling", response?.respuesta ?? "Accion procesada.", {
+        tools: toolsExecuted
+      });
+    } catch (error: any) {
+      toolsExecuted[toolsExecuted.length - 1].status = "ERROR";
+      toolsExecuted[toolsExecuted.length - 1].error = String(error?.message ?? error);
+      console.error("Error ejecutando accion planificada:", {
+        tool,
+        args,
+        error
+      });
+
+      return await finish(
+        "function-calling",
+        "No pude completar la accion por un problema interno. Revisa los datos e intenta de nuevo.",
+        { tools: toolsExecuted }
+      );
+    }
+  }
+
   try {
+    routerStage = "save-user-message";
     if (conversationId) {
       await insertConversationMessage("user", preguntaOriginal);
     }
@@ -714,7 +982,7 @@ export default defineEventHandler(async (event) => {
       });
 
       try {
-        const created = await $fetch("/api/memories/create", {
+        const created = await event.$fetch("/api/memories/create", {
           method: "POST",
           body: {
             usuario_id: usuarioId,
@@ -746,25 +1014,86 @@ export default defineEventHandler(async (event) => {
     }
 
     // =====================================================
+    // PLANIFICADOR DETERMINISTA DE IA
+    // Maneja consultas simples, datos faltantes, acciones
+    // pendientes y confirmaciones antes de usar el LLM.
+    // =====================================================
+
+    routerStage = "read-conversation-state";
+    const pendingAction = getPendingIaAction(conversationId, usuarioId);
+    const conversationContext = getIaConversationContext(conversationId, usuarioId);
+    routerStage = "plan-turn";
+    const plannedTurn = planIaTurn({
+      text: preguntaOriginal,
+      pending: pendingAction,
+      context: conversationContext
+    });
+
+    routerStage = "log-planned-turn";
+    toolsExecuted.push({
+      name: "ia.intent.planner",
+      status: "SUCCESS",
+      params: {
+        pregunta: preguntaOriginal,
+        pending: pendingAction,
+        planned: plannedTurn
+      }
+    });
+
+    if (plannedTurn.kind === "clear") {
+      clearPendingIaAction(conversationId, usuarioId);
+      return await finish("planner", plannedTurn.respuesta, {
+        tools: toolsExecuted
+      });
+    }
+
+    if (plannedTurn.kind === "clarify" || plannedTurn.kind === "empty") {
+      return await finish("planner", plannedTurn.respuesta, {
+        tools: toolsExecuted
+      });
+    }
+
+    if (plannedTurn.kind === "pending") {
+      routerStage = "save-pending-action";
+      setPendingIaAction(conversationId, usuarioId, plannedTurn.pending);
+      routerStage = "respond-pending-action";
+      return await finish("planner", plannedTurn.respuesta, {
+        tools: toolsExecuted
+      });
+    }
+
+    if (plannedTurn.kind === "execute") {
+      if (plannedTurn.clearPending) {
+        clearPendingIaAction(conversationId, usuarioId);
+      }
+
+      return await executePlannerAction(
+        plannedTurn.tool,
+        plannedTurn.args
+      );
+    }
+
+    if (plannedTurn.kind === "query") {
+      return await runPlannerQuery(plannedTurn.query);
+    }
+
+    // =====================================================
     // CARGAR BOVINOS DEL USUARIO
     // =====================================================
 
-    const bovinos = usuarioId
-      ? await sql`
-          SELECT *
-          FROM bovinos
-          WHERE usuario_id = ${usuarioId}
-        `
-      : await sql`
-          SELECT *
-          FROM bovinos
-        `;
+    const bovinos = await sql`
+      SELECT * FROM bovinos WHERE usuario_id = ${usuarioId}
+    `;
 
     const animalMatch = resolveAnimalFromContext(
       pregunta,
       bovinos,
       historial
     );
+
+    if (animalMatch?.id && animalMatch?.nombre) {
+      setIaConversationBovino(conversationId, usuarioId, animalMatch, "consulta");
+    }
 
     const preguntaParaAcciones = enrichQuestionWithAnimal(
       preguntaOriginal,
@@ -808,7 +1137,7 @@ export default defineEventHandler(async (event) => {
       });
 
       try {
-        const functionResponse = await $fetch("/api/ia/function-calling", {
+        const functionResponse = await event.$fetch("/api/ia/function-calling", {
           method: "POST",
           body: {
             pregunta: preguntaParaAcciones,
@@ -1048,41 +1377,33 @@ export default defineEventHandler(async (event) => {
       const target = extractCountTarget(preguntaOriginal);
 
       if (target === "ranchos") {
-        const result = usuarioId
-          ? await sql`SELECT COUNT(*) AS total FROM ranchos WHERE usuario_id = ${usuarioId}`
-          : await sql`SELECT COUNT(*) AS total FROM ranchos`;
+        const result = await sql`SELECT COUNT(*) AS total FROM ranchos WHERE usuario_id = ${usuarioId}`;
         return await finish("sql", `Tienes ${result[0].total} ranchos registrados.`, {
           tools: toolsExecuted
         });
       }
 
       if (target === "duenos") {
-        const result = usuarioId
-          ? await sql`SELECT COUNT(*) AS total FROM duenos WHERE usuario_id = ${usuarioId}`
-          : await sql`SELECT COUNT(*) AS total FROM duenos`;
+        const result = await sql`SELECT COUNT(*) AS total FROM duenos WHERE usuario_id = ${usuarioId}`;
         return await finish("sql", `Tienes ${result[0].total} dueños registrados.`, {
           tools: toolsExecuted
         });
       }
 
       if (target === "vacunas_catalogo") {
-        const result = usuarioId
-          ? await sql`SELECT COUNT(*) AS total FROM vacunas WHERE usuario_id = ${usuarioId}`
-          : await sql`SELECT COUNT(*) AS total FROM vacunas`;
+        const result = await sql`SELECT COUNT(*) AS total FROM vacunas WHERE usuario_id = ${usuarioId}`;
         return await finish("sql", `Tienes ${result[0].total} vacunas en el catálogo.`, {
           tools: toolsExecuted
         });
       }
 
       if (target === "enfermedades") {
-        const result = usuarioId
-          ? await sql`
+        const result = await sql`
               SELECT COUNT(*) AS total
               FROM enfermedades e
               INNER JOIN bovinos b ON b.id = e.bovino_id
               WHERE b.usuario_id = ${usuarioId}
-            `
-          : await sql`SELECT COUNT(*) AS total FROM enfermedades`;
+            `;
         return await finish("sql", `Hay ${result[0].total} enfermedades registradas.`, {
           tools: toolsExecuted
         });
@@ -1094,23 +1415,17 @@ export default defineEventHandler(async (event) => {
     // =====================================================
 
     if (isVentaListQuery(preguntaOriginal)) {
-      const candidatos = usuarioId
-        ? await sql`
+      const candidatos = await sql`
             SELECT id, nombre, numero_arete
             FROM bovinos
             WHERE usuario_id = ${usuarioId}
               AND LOWER(COALESCE(estado, 'activa')) NOT IN ('vendida', 'vendido', 'baja')
-          `
-        : await sql`
-            SELECT id, nombre, numero_arete
-            FROM bovinos
-            WHERE LOWER(COALESCE(estado, 'activa')) NOT IN ('vendida', 'vendido', 'baja')
           `;
 
       const aptas: string[] = [];
 
       for (const vaca of candidatos) {
-        const ventaResponse = await $fetch<{ respuesta?: string; lista?: boolean }>(
+        const ventaResponse = await event.$fetch<{ respuesta?: string; lista?: boolean }>(
           "/api/ia/venta",
           {
             method: "POST",
@@ -1190,7 +1505,7 @@ export default defineEventHandler(async (event) => {
         }
       });
 
-      const ventaResponse = await $fetch("/api/ia/venta", {
+      const ventaResponse = await event.$fetch("/api/ia/venta", {
         method: "POST",
         body: {
           nombre: animalParaVenta.nombre
@@ -1220,17 +1535,11 @@ export default defineEventHandler(async (event) => {
       !hasWords(pregunta, ["machos"]) &&
       !hasWords(pregunta, ["macho"])
     ) {
-      const result = usuarioId
-        ? await sql`
+      const result = await sql`
             SELECT COUNT(*) AS total
             FROM bovinos
             WHERE LOWER(sexo) = 'hembra'
               AND usuario_id = ${usuarioId}
-          `
-        : await sql`
-            SELECT COUNT(*) AS total
-            FROM bovinos
-            WHERE LOWER(sexo) = 'hembra'
           `;
 
       return await finish(
@@ -1252,17 +1561,11 @@ export default defineEventHandler(async (event) => {
       !hasWords(pregunta, ["hembras"]) &&
       !hasWords(pregunta, ["hembra"])
     ) {
-      const result = usuarioId
-        ? await sql`
+      const result = await sql`
             SELECT COUNT(*) AS total
             FROM bovinos
             WHERE LOWER(sexo) = 'macho'
               AND usuario_id = ${usuarioId}
-          `
-        : await sql`
-            SELECT COUNT(*) AS total
-            FROM bovinos
-            WHERE LOWER(sexo) = 'macho'
           `;
 
       return await finish(
@@ -1283,15 +1586,10 @@ export default defineEventHandler(async (event) => {
       pregunta.includes("total vacas") ||
       pregunta.includes("total bovinos")
     ) {
-      const result = usuarioId
-        ? await sql`
+      const result = await sql`
             SELECT COUNT(*) AS total
             FROM bovinos
             WHERE usuario_id = ${usuarioId}
-          `
-        : await sql`
-            SELECT COUNT(*) AS total
-            FROM bovinos
           `;
 
       return await finish(
@@ -1311,8 +1609,7 @@ export default defineEventHandler(async (event) => {
       pregunta.includes("vacunado") ||
       pregunta.includes("vacunados")
     ) {
-      const result = usuarioId
-        ? await sql`
+      const result = await sql`
             SELECT DISTINCT
               v.nombre,
               v.numero_arete
@@ -1320,14 +1617,6 @@ export default defineEventHandler(async (event) => {
             INNER JOIN vacuna_aplicada va
               ON va.bovino_id = v.id
             WHERE v.usuario_id = ${usuarioId}
-          `
-        : await sql`
-            SELECT DISTINCT
-              v.nombre,
-              v.numero_arete
-            FROM bovinos v
-            INNER JOIN vacuna_aplicada va
-              ON va.bovino_id = v.id
           `;
 
       if (!result.length) {
@@ -1365,8 +1654,7 @@ export default defineEventHandler(async (event) => {
       pregunta.includes("listame las vacas ") ||
       pregunta.includes("listame los bovinos ")
     ) {
-      const result = usuarioId
-        ? await sql`
+      const result = await sql`
             SELECT
               nombre,
               raza,
@@ -1374,14 +1662,6 @@ export default defineEventHandler(async (event) => {
               numero_arete
             FROM bovinos
             WHERE usuario_id = ${usuarioId}
-          `
-        : await sql`
-            SELECT
-              nombre,
-              raza,
-              sexo,
-              numero_arete
-            FROM bovinos
           `;
 
       if (!result.length) {
@@ -1425,7 +1705,7 @@ export default defineEventHandler(async (event) => {
     });
 
     try {
-      const functionResponse = await $fetch("/api/ia/function-calling", {
+      const functionResponse = await event.$fetch("/api/ia/function-calling", {
         method: "POST",
         body: {
           pregunta: preguntaParaAcciones,
@@ -1761,34 +2041,25 @@ ${enfermedadesRows.length}
 
     sseWrite({ estado: "Pensando..." });
 
-    const memoriaRows = usuarioId
-      ? await sql`
+    const memoriaRows = await sql`
           SELECT contenido
           FROM memories
           WHERE usuario_id = ${usuarioId}
           ORDER BY updated_at DESC, id DESC
           LIMIT 20
-        `
-      : [];
+        `;
 
     const contextoMemorias = memoriaRows.length
       ? memoriaRows.map((m: any) => m.contenido).join("\n")
       : "";
 
-    const contextoGanaderoRows = usuarioId
-      ? await sql`
+    const contextoGanaderoRows = await sql`
           SELECT contenido
           FROM semantic_contexts sc
           INNER JOIN bovinos v
             ON v.id = sc.bovino_id
           WHERE v.usuario_id = ${usuarioId}
           ORDER BY sc.updated_at DESC, sc.id DESC
-          LIMIT 3
-        `
-      : await sql`
-          SELECT contenido
-          FROM semantic_contexts
-          ORDER BY updated_at DESC, id DESC
           LIMIT 3
         `;
 
@@ -1895,7 +2166,8 @@ ${enfermedadesRows.length}
       });
     }
   } catch (error: any) {
-    const errorText = `Error interno en el router: ${String(
+    console.error("IA router error", error);
+    const errorText = `Error interno en el router [${routerStage}]: ${String(
       error?.message ?? error
     )}`;
 

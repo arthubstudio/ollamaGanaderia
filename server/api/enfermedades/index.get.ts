@@ -1,34 +1,10 @@
-import { db } from "~/lib/db";
-import { enfermedades, bovinos } from "~/drizzle/schema";
-import { and, desc, eq } from "drizzle-orm";
-
-export default defineEventHandler(async (event) => {
-  const query = getQuery(event);
-
-  const vacaId = Number(query.bovino_id);
-  const usuarioId = Number(query.usuario_id);
-
-  if (!vacaId || !usuarioId) {
-    return [];
-  }
-
-  const vaca = await db
-    .select({ id: bovinos.id })
-    .from(bovinos)
-    .where(
-      and(
-        eq(bovinos.id, vacaId),
-        eq(bovinos.usuario_id, usuarioId)
-      )
-    );
-
-  if (!vaca.length) {
-    return [];
-  }
-
-  return await db
-    .select()
-    .from(enfermedades)
-    .where(eq(enfermedades.bovino_id, vacaId))
-    .orderBy(desc(enfermedades.fecha), desc(enfermedades.id));
-});
+import { sql } from "~/lib/db";
+import { parseId, runApi } from "~/server/utils/api";
+import { requireOwnedBovino } from "~/server/utils/ownership";
+import { requireUserId } from "~/server/utils/session";
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  const bovinoId = parseId(getQuery(event).bovino_id, "bovino_id");
+  await requireOwnedBovino(bovinoId, userId);
+  return sql`SELECT * FROM enfermedades WHERE bovino_id = ${bovinoId} ORDER BY fecha DESC NULLS LAST, id DESC`;
+}));

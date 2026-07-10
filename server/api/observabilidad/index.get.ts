@@ -1,26 +1,12 @@
-import postgres from "postgres";
-
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
-);
-
-export default defineEventHandler(
-  async () => {
-
-    return await sql`
-
-      SELECT *
-
-      FROM ai_logs
-
-      ORDER BY id DESC
-
-      LIMIT 100
-
-    `;
-
-  }
-);
+import { sql } from "~/lib/db";
+import { runApi } from "~/server/utils/api";
+import { requireUserId } from "~/server/utils/session";
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  return sql`
+    SELECT * FROM ai_logs
+    WHERE session_id = ${`user:${userId}`}
+       OR session_id IN (SELECT id::text FROM conversations WHERE usuario_id = ${userId})
+    ORDER BY id DESC LIMIT 100
+  `;
+}));

@@ -1,26 +1,9 @@
-import { db } from "~/lib/db";
-import { bovinos } from "~/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { parseId, runApi } from "~/server/utils/api";
+import { requireOwnedBovino } from "~/server/utils/ownership";
+import { requireUserId } from "~/server/utils/session";
 
-export default defineEventHandler(async (event) => {
-  const id = Number(event.context.params?.id);
-
-  const query = getQuery(event);
-  const usuarioId = Number(query.usuario_id);
-
-  if (!id || !usuarioId) {
-    return null;
-  }
-
-  const result = await db
-    .select()
-    .from(bovinos)
-    .where(
-      and(
-        eq(bovinos.id, id),
-        eq(bovinos.usuario_id, usuarioId)
-      )
-    );
-
-  return result[0] ?? null;
-});
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  const id = parseId(event.context.params?.id);
+  return requireOwnedBovino(id, userId);
+}));

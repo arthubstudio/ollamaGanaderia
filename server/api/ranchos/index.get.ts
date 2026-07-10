@@ -1,29 +1,7 @@
-import { db } from "~/lib/db";
-import { ranchos } from "~/drizzle/schema";
-import { eq } from "drizzle-orm";
-
-export default defineEventHandler(async (event) => {
-
-  const query =
-    getQuery(event);
-
-  const usuarioId =
-    Number(
-      query.usuario_id
-    );
-
-  if (!usuarioId) {
-    return [];
-  }
-
-  return await db
-    .select()
-    .from(ranchos)
-    .where(
-      eq(
-        ranchos.usuario_id,
-        usuarioId
-      )
-    );
-
-});
+import { sql } from "~/lib/db";
+import { runApi } from "~/server/utils/api";
+import { requireUserId } from "~/server/utils/session";
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  return sql`SELECT * FROM ranchos WHERE usuario_id = ${userId} ORDER BY nombre ASC`;
+}));

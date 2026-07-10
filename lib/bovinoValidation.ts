@@ -114,11 +114,11 @@ export function validarNumeroArete(valor: string): ValidationOk | ValidationErr 
 }
 
 export function validarNombre(valor: string): ValidationOk | ValidationErr {
-  return rechazarTextoInformal(valor, "nombre", 5, 100);
+  return rechazarTextoInformal(valor, "nombre", 2, 100);
 }
 
 export function validarRaza(valor: string): ValidationOk | ValidationErr {
-  return rechazarTextoInformal(valor, "raza", 4, 100);
+  return rechazarTextoInformal(valor, "raza", 3, 100);
 }
 
 export type DatosBovinoInput = {

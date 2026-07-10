@@ -134,8 +134,6 @@ export function extractCountTarget(text: string) {
 export function needsBovinoAssignment(text: string) {
   const t = normalizeIntentText(text);
 
-  if (isCreateOnlyCatalog(text)) return false;
-
   return (
     /\b(aplicar|aplicale|aplicarle|asignar|asignale|asignarle|transferir|transfiere|transfierelo|transfierela|designar|designale|darle|ponerle|ponle|propiedad de|propiedad del|propiedad a)\b/.test(
       t

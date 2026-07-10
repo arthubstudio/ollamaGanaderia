@@ -1,13 +1,9 @@
-import postgres from "postgres";
+import { sql } from "~/lib/db";
 import { ollama } from "~/lib/ollama";
 import { generarEmbedding } from "~/lib/embeddings";
 
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
-);
+import { apiError } from "~/server/utils/api";
+import { requireUserId } from "~/server/utils/session";
 
 function normalizeText(value: string) {
   return (value ?? "")
@@ -102,9 +98,12 @@ export default defineEventHandler(async (event) => {
     ? String(body.conversation_id)
     : null;
 
-  const usuarioId = body.usuario_id
-    ? Number(body.usuario_id)
-    : null;
+  const usuarioId = requireUserId(event);
+
+  if (conversationId) {
+    const owner = await sql`SELECT id FROM conversations WHERE id = ${conversationId} AND usuario_id = ${usuarioId} LIMIT 1`;
+    if (!owner.length) apiError({ statusCode: 404, code: "NOT_FOUND", message: "Conversacion no encontrada." });
+  }
 
   const historialDesc: ConversationMessage[] = conversationId
     ? await sql`
@@ -204,7 +203,9 @@ export default defineEventHandler(async (event) => {
     SELECT
       contenido,
       embedding <=> ${vector}::vector AS distancia
-    FROM semantic_contexts
+    FROM semantic_contexts sc
+    JOIN bovinos b ON b.id = sc.bovino_id
+    WHERE b.usuario_id = ${usuarioId}
     ORDER BY distancia ASC
     LIMIT 3
   `;

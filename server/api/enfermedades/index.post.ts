@@ -1,50 +1,20 @@
-import { db } from "~/lib/db";
-import { enfermedades, bovinos } from "~/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { sql } from "~/lib/db";
+import { optionalDate, optionalText, parseId, requiredText, runApi } from "~/server/utils/api";
+import { requireOwnedBovino } from "~/server/utils/ownership";
+import { requireUserId } from "~/server/utils/session";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
-
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
   const body = await readBody(event);
-
-  const vacaId = Number(body.bovino_id);
-  const usuarioId = Number(body.usuario_id);
-
-  if (!vacaId || !usuarioId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Faltan datos"
-    });
-  }
-
-  const vaca = await db
-    .select({ id: bovinos.id })
-    .from(bovinos)
-    .where(
-      and(
-        eq(bovinos.id, vacaId),
-        eq(bovinos.usuario_id, usuarioId)
-      )
-    );
-
-  if (!vaca.length) {
-    throw createError({
-      statusCode: 403,
-      statusMessage: "La vaca no pertenece al usuario"
-    });
-  }
-
-  const result = await db
-    .insert(enfermedades)
-    .values({
-      bovino_id: vacaId,
-      nombre: body.nombre,
-      tratamiento: body.tratamiento,
-      fecha: body.fecha,
-      veterinario: body.veterinario,
-    })
-    .returning();
-
-  await rebuildBovinoContext(vacaId);
-
-  return result[0];
-});
+  const bovinoId = parseId(body?.bovino_id, "bovino_id");
+  await requireOwnedBovino(bovinoId, userId);
+  const rows = await sql`
+    INSERT INTO enfermedades (bovino_id, nombre, tratamiento, fecha, veterinario)
+    VALUES (${bovinoId}, ${requiredText(body?.nombre, "nombre", 100)},
+      ${optionalText(body?.tratamiento)},
+      ${optionalDate(body?.fecha, "La fecha") ?? new Date().toISOString().slice(0, 10)},
+      ${optionalText(body?.veterinario, 100)}) RETURNING *
+  `;
+  await rebuildBovinoContext(bovinoId);
+  return rows[0];
+}));

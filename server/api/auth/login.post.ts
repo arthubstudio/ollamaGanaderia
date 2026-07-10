@@ -1,71 +1,46 @@
-import postgres from "postgres";
+import { sql } from "~/lib/db";
+import { apiError, requiredText, runApi } from "~/server/utils/api";
+import {
+  hashPassword,
+  setUserSession,
+  verifyPassword
+} from "~/server/utils/session";
 
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
-);
-
-export default defineEventHandler(async (event) => {
-
+export default defineEventHandler(async (event) => runApi(async () => {
   const body = await readBody(event);
+  const email = requiredText(body?.email, "email", 150).toLowerCase();
+  const password = requiredText(body?.password, "password", 200);
 
-  const usuario = await sql`
-
-    SELECT *
-
+  const rows = await sql`
+    SELECT id, nombre, email, rol, password_hash
     FROM usuarios
-
-    WHERE email = ${body.email}
-
+    WHERE LOWER(email) = ${email}
     LIMIT 1
-
   `;
+  const usuario = rows[0];
 
-  if (!usuario.length) {
-
-    throw createError({
-
+  if (!usuario || !verifyPassword(password, String(usuario.password_hash))) {
+    apiError({
       statusCode: 401,
-
-      statusMessage:
-        "Usuario no encontrado"
-
+      code: "INVALID_CREDENTIALS",
+      message: "Credenciales incorrectas."
     });
-
   }
 
-  if (
-    usuario[0].password_hash !==
-    body.password
-  ) {
-
-    throw createError({
-
-      statusCode: 401,
-
-      statusMessage:
-        "Contraseña incorrecta"
-
-    });
-
+  if (!String(usuario.password_hash).startsWith("scrypt$")) {
+    await sql`
+      UPDATE usuarios
+      SET password_hash = ${hashPassword(password)}
+      WHERE id = ${usuario.id}
+    `;
   }
+
+  setUserSession(event, Number(usuario.id));
 
   return {
-
-    id:
-      usuario[0].id,
-
-    nombre:
-      usuario[0].nombre,
-
-    email:
-      usuario[0].email,
-
-    rol:
-      usuario[0].rol
-
+    id: Number(usuario.id),
+    nombre: usuario.nombre,
+    email: usuario.email,
+    rol: usuario.rol
   };
-
-});
+}));

@@ -12,10 +12,9 @@ import {
 
 export default defineEventHandler(async (event) => {
   const id = Number(event.context.params?.id);
-  const query = getQuery(event);
-  const usuarioId = Number(query.usuario_id);
+  const usuarioId = requireUserId(event);
 
-  if (!id || !usuarioId) {
+  if (!id) {
     throw createError({
       statusCode: 400,
       statusMessage: "Faltan datos para eliminar"
@@ -51,3 +50,5 @@ export default defineEventHandler(async (event) => {
 
   return { ok: true };
 });
+
+import { requireUserId } from "~/server/utils/session";

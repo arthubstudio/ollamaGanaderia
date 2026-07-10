@@ -28,6 +28,7 @@ import { actualizarBovino } from "./tools/actualizarBovino";
 import { quitarPropiedad } from "./tools/quitarPropiedad";
 import { inferActionFromQuestion } from "~/lib/iaWriteActionRouter";
 import { needsBovinoAssignment } from "~/lib/iaIntentRouter";
+import { requireUserId } from "~/server/utils/session";
 
 type AnyObject = Record<string, any>;
 
@@ -47,6 +48,105 @@ function safeJsonParse(value: unknown): AnyObject {
   }
 
   return {};
+}
+
+function firstTextValue(source: AnyObject, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+
+  return "";
+}
+
+function normalizeToolArguments(
+  toolName: string,
+  argumentos: AnyObject,
+  nombreAnimalContexto: string | null
+) {
+  const normalized: AnyObject = { ...argumentos };
+
+  const bovinoName = firstTextValue(normalized, [
+    "nombre_vaca",
+    "nombre_bovino",
+    "bovino_nombre",
+    "nombre_animal",
+    "animal",
+    "vaca",
+    "bovino",
+    "toro"
+  ]);
+
+  if (
+    [
+      "aplicarVacuna",
+      "registrarEnfermedad",
+      "transferirPropiedad",
+      "eliminarVacunaAplicada",
+      "eliminarEnfermedad",
+      "quitarPropiedad"
+    ].includes(toolName) &&
+    !normalized.nombre_vaca
+  ) {
+    normalized.nombre_vaca = bovinoName || nombreAnimalContexto || "";
+  }
+
+  if (toolName === "registrarPeso" && !normalized.nombre) {
+    normalized.nombre =
+      bovinoName ||
+      firstTextValue(normalized, ["nombre"]) ||
+      nombreAnimalContexto ||
+      "";
+  }
+
+  if (toolName === "aplicarVacuna" && !normalized.vacuna_nombre) {
+    normalized.vacuna_nombre = firstTextValue(normalized, [
+      "vacuna_nombre",
+      "nombre_vacuna",
+      "vacuna",
+      "nombre"
+    ]);
+  }
+
+  if (toolName === "registrarEnfermedad" && !normalized.enfermedad) {
+    normalized.enfermedad = firstTextValue(normalized, [
+      "enfermedad",
+      "nombre_enfermedad",
+      "diagnostico"
+    ]);
+  }
+
+  if (toolName === "registrarPeso" && normalized.peso === undefined) {
+    const peso = firstTextValue(normalized, [
+      "peso",
+      "peso_kg",
+      "kilogramos",
+      "kg"
+    ]);
+    if (peso) normalized.peso = Number(peso);
+  }
+
+  if (toolName === "crearBovino") {
+    if (!normalized.numero_arete) {
+      normalized.numero_arete = firstTextValue(normalized, [
+        "numero_arete",
+        "arete",
+        "identificador",
+        "numero"
+      ]);
+    }
+
+    if (!normalized.raza) {
+      normalized.raza = firstTextValue(normalized, ["raza", "breed"]);
+    }
+
+    if (!normalized.sexo) {
+      normalized.sexo = firstTextValue(normalized, ["sexo", "genero"]);
+    }
+  }
+
+  return normalized;
 }
 
 function parseToolCallFromContent(content: string): {
@@ -538,6 +638,12 @@ async function executeToolCall(
   usuarioId: number | null,
   nombreAnimalContexto: string | null
 ) {
+  argumentos = normalizeToolArguments(
+    toolName,
+    argumentos,
+    nombreAnimalContexto
+  );
+
   switch (toolName) {
     case "getPeso":
       return getPeso(String(argumentos.nombre ?? ""), usuarioId);
@@ -805,9 +911,13 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event);
 
   const pregunta = String(body?.pregunta ?? "").trim();
+  const directTool = body?.direct_tool ? String(body.direct_tool) : "";
+  const directArgs = body?.direct_args && typeof body.direct_args === "object"
+    ? body.direct_args as AnyObject
+    : null;
 
   const conversationId = body?.conversation_id ? String(body.conversation_id) : null;
-  const usuarioId = body?.usuario_id ? Number(body.usuario_id) : null;
+  const usuarioId = requireUserId(event);
   const historial = Array.isArray(body?.historial) ? body.historial : [];
   const animalContext = body?.animal_context ?? null;
   const nombreAnimalContexto = animalContext?.nombre
@@ -822,6 +932,45 @@ export default defineEventHandler(async (event) => {
       resultado: null,
       respuesta: "Escribe una pregunta."
     };
+  }
+
+  if (directTool && directArgs) {
+    const argumentos = normalizeToolArguments(
+      directTool,
+      directArgs,
+      nombreAnimalContexto
+    );
+
+    try {
+      const resultado = await executeToolCall(
+        directTool,
+        argumentos,
+        usuarioId,
+        nombreAnimalContexto
+      );
+
+      return {
+        encontrado: true,
+        tool: directTool,
+        argumentos,
+        resultado,
+        respuesta: buildRespuesta(directTool, argumentos, resultado)
+      };
+    } catch (error: any) {
+      console.error("Error ejecutando herramienta directa de IA:", {
+        tool: directTool,
+        argumentos,
+        error
+      });
+
+      return {
+        encontrado: true,
+        tool: directTool,
+        argumentos,
+        resultado: null,
+        respuesta: "No pude completar la accion por un problema interno. Revisa los datos e intenta de nuevo."
+      };
+    }
   }
 
   const inferredAction = inferActionFromQuestion(
@@ -955,7 +1104,11 @@ Reglas generales:
   }
 
   const toolName = toolCall.name;
-  const argumentos = toolCall.arguments;
+  const argumentos = normalizeToolArguments(
+    toolName,
+    toolCall.arguments,
+    nombreAnimalContexto
+  );
 
   let resultado: any = null;
 

@@ -15,7 +15,9 @@ function isActive(path: string) {
   return route.path.startsWith(path);
 }
 
-function cerrarSesion() {
+async function cerrarSesion() {
+  await $fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+
   if (process.client) {
     localStorage.removeItem("usuario");
   }

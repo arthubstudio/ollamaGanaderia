@@ -1,14 +1,11 @@
-import { db } from "~/lib/db";
-import { vacunas } from "~/drizzle/schema";
-import { eq } from "drizzle-orm";
-
-export default defineEventHandler(async (event) => {
-  const id = Number(event.context.params?.id);
-
-  const result = await db
-    .delete(vacunas)
-    .where(eq(vacunas.id, id))
-    .returning();
-
-  return result[0];
-});
+import { sql } from "~/lib/db";
+import { parseId, runApi } from "~/server/utils/api";
+import { requireOwnedVacuna } from "~/server/utils/ownership";
+import { requireUserId } from "~/server/utils/session";
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  const id = parseId(event.context.params?.id);
+  await requireOwnedVacuna(id, userId);
+  await sql`DELETE FROM vacunas WHERE id = ${id} AND usuario_id = ${userId}`;
+  return { success: true };
+}));

@@ -48,6 +48,7 @@ function calcularEdad(fechaNacimiento: string | Date | null) {
 export async function rebuildBovinoContext(
   vacaId: number
 ) {
+  try {
 
   const vacaRows =
     await sql`
@@ -380,5 +381,12 @@ ${v.fecha}
     )
 
   `;
+
+  } catch (error) {
+    console.warn(
+      "No se pudo reconstruir el contexto semantico del bovino:",
+      error
+    );
+  }
 
 }

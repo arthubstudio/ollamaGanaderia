@@ -1,24 +1,16 @@
-import { db } from "~/lib/db";
-import { duenos } from "~/drizzle/schema";
-
-import { eq } from "drizzle-orm";
-
-export default defineEventHandler(async (event) => {
-
-  const id = Number(event.context.params?.id);
-
+import { sql } from "~/lib/db";
+import { optionalText, parseId, requiredText, runApi } from "~/server/utils/api";
+import { requireOwnedDueno } from "~/server/utils/ownership";
+import { requireUserId } from "~/server/utils/session";
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  const id = parseId(event.context.params?.id);
   const body = await readBody(event);
-
-  const result = await db
-    .update(duenos)
-    .set({
-      nombre: body.nombre,
-      telefono: body.telefono,
-      direccion: body.direccion
-    })
-    .where(eq(duenos.id, id))
-    .returning();
-
-  return result[0];
-
-});
+  await requireOwnedDueno(id, userId);
+  const rows = await sql`
+    UPDATE duenos SET nombre = ${requiredText(body?.nombre, "nombre", 100)},
+      telefono = ${optionalText(body?.telefono, 50)}, direccion = ${optionalText(body?.direccion)}
+    WHERE id = ${id} AND usuario_id = ${userId} RETURNING *
+  `;
+  return rows[0];
+}));

@@ -1,32 +1,16 @@
-import { db } from "~/lib/db";
-
-import {
-  historialPropiedad
-} from "~/drizzle/schema";
-
-export default defineEventHandler(async (event) => {
-
+import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
+import { optionalText, parseId, runApi } from "~/server/utils/api";
+import { transferOwnership } from "~/server/services/ownershipTransfer";
+import { requireUserId } from "~/server/utils/session";
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
   const body = await readBody(event);
-
-  const result = await db
-    .insert(historialPropiedad)
-    .values({
-
-      bovino_id: body.bovino_id,
-
-      dueno_id: body.dueno_id,
-
-      rancho_id: body.rancho_id,
-
-      fecha_inicio: body.fecha_inicio,
-
-      fecha_fin: null,
-
-      observaciones: body.observaciones
-
-    })
-    .returning();
-
-  return result[0];
-
-});
+  const bovinoId = parseId(body?.bovino_id, "bovino_id");
+  const result = await transferOwnership({
+    userId, bovinoId, duenoId: body?.dueno_id, ranchoId: body?.rancho_id,
+    fechaInicio: body?.fecha_inicio,
+    observaciones: optionalText(body?.observaciones)
+  });
+  await rebuildBovinoContext(bovinoId);
+  return result;
+}));

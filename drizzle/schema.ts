@@ -539,6 +539,14 @@ export const semanticContexts =
         "usuario_id"
       ),
 
+      slot: text(
+        "slot"
+      ).notNull(),
+
+      tipo: text(
+        "tipo"
+      ).notNull(),
+
       contenido: text(
         "contenido"
       ),
@@ -552,6 +560,10 @@ export const semanticContexts =
 
       created_at: timestamp(
         "created_at"
+      ),
+
+      updated_at: timestamp(
+        "updated_at"
       )
 
     }

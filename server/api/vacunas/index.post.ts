@@ -1,37 +1,20 @@
 import { crearVacunaUsuario } from "~/lib/vacunaService";
-
-export default defineEventHandler(async (event) => {
+import { apiError, optionalText, requiredText, runApi } from "~/server/utils/api";
+import { requireUserId } from "~/server/utils/session";
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
   const body = await readBody(event);
-  const usuarioId = Number(body.usuario_id);
-
-  if (!usuarioId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "usuario_id requerido"
+  const result = await crearVacunaUsuario({
+    nombre: requiredText(body?.nombre, "nombre", 100),
+    descripcion: optionalText(body?.descripcion),
+    usuarioId: userId
+  });
+  if (!result.ok) {
+    apiError({
+      statusCode: result.code === "DUPLICATE" ? 409 : 400,
+      code: result.code,
+      message: result.error
     });
   }
-
-  try {
-    const result = await crearVacunaUsuario({
-      nombre: String(body.nombre ?? ""),
-      descripcion: body.descripcion ?? null,
-      usuarioId
-    });
-
-    if (!result.ok) {
-      throw createError({
-        statusCode: result.code === "DUPLICATE" ? 409 : 400,
-        statusMessage: result.error
-      });
-    }
-
-    return result.vacuna;
-  } catch (error: any) {
-    if (error?.statusCode) throw error;
-
-    throw createError({
-      statusCode: 500,
-      statusMessage: "No se pudo guardar la vacuna. Intenta de nuevo."
-    });
-  }
-});
+  return result.vacuna;
+}));

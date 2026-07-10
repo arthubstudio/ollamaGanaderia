@@ -8,6 +8,8 @@ El proyecto esta construido como una aplicacion Nuxt: frontend y backend viven e
 
 La IA funciona con Ollama local. Usa un router principal que combina reglas, consultas SQL directas, guardrails, memoria de usuario, function calling con herramientas internas y fallback RAG sobre contexto semantico almacenado en PostgreSQL con pgvector.
 
+El flujo actual incluye una capa determinista previa al LLM para clasificar intenciones frecuentes, extraer parametros, detectar datos faltantes, mantener acciones pendientes por conversacion y pedir confirmacion antes de cualquier escritura. La autenticacion usa una cookie de sesion firmada y HttpOnly; los endpoints obtienen `usuario_id` exclusivamente de esa sesion.
+
 ## Stack tecnologico
 
 Frontend:
@@ -91,6 +93,15 @@ app/
     memories/                Memorias semanticas del usuario
     conversations/           Conversaciones y mensajes
     observabilidad/          Logs de IA
+    ventas/                  CRUD de ventas
+
+  server/utils/
+    session.ts               Sesion firmada y hash de contrasenas
+    api.ts                   Normalizacion y errores seguros
+    ownership.ts             Validacion de propiedad por usuario
+
+  server/services/
+    ownershipTransfer.ts     Transferencias transaccionales
 
   lib/                       Logica compartida
     db.ts                    Conexion Drizzle/PostgreSQL
@@ -100,6 +111,8 @@ app/
     bovinoValidation.ts      Validaciones de datos bovinos
     iaIntentRouter.ts        Deteccion de intenciones
     iaWriteActionRouter.ts   Inferencia de acciones de escritura
+    iaActionPlanner.js       Planner determinista de intenciones, parametros y datos faltantes
+    iaConversationState.js   Estado temporal de acciones pendientes por conversacion
     conversationContext.ts   Contexto conversacional
 
   drizzle/
@@ -129,13 +142,13 @@ app/
 
 5. El frontend manda email y password a `/api/auth/login`.
 
-6. El backend busca el usuario en `usuarios` y compara la password contra `password_hash`.
+6. El backend busca el usuario, valida la password y crea una cookie de sesion firmada, HttpOnly y SameSite=Lax. Las contrasenas nuevas usan scrypt; las contrasenas legacy se actualizan al iniciar sesion.
 
 7. Si el login es correcto, el frontend guarda el usuario en:
    - `localStorage`
    - `useState("usuario")`
 
-8. Las paginas protegidas usan `middleware/auth.ts`, que valida la presencia del usuario en `localStorage`.
+8. Las paginas protegidas conservan `localStorage` para estado visual, pero la autorizacion real ocurre en Nitro mediante la cookie de sesion.
 
 9. El dashboard consulta `/api/dashboard?usuario_id=...`.
 
@@ -156,6 +169,12 @@ app/
     - Aplica guardrails.
     - Responde saludos o ayuda sin LLM cuando aplica.
     - Detecta y guarda memorias.
+    - Ejecuta un planner determinista para consultas simples, acciones incompletas y confirmaciones.
+    - Conserva temporalmente acciones pendientes y la ultima entidad bovino en memoria del servidor.
+    - Resuelve referencias como `la vaca`, `ella` o `su peso` contra el contexto estructurado de la conversacion.
+    - Confirma los parametros antes de cualquier escritura.
+    - Pide datos faltantes en lugar de mostrar errores tecnicos.
+    - Ejecuta tools directamente cuando la accion ya esta validada.
     - Ejecuta consultas SQL directas para casos comunes.
     - Intenta function calling con herramientas internas.
     - Consulta datos especificos si detecta un bovino.
@@ -242,6 +261,7 @@ Scripts disponibles en `package.json`:
 ```bash
 npm run dev
 npm run build
+npm run test
 npm run generate
 npm run preview
 npm run postinstall
@@ -251,8 +271,11 @@ npm run postinstall
 
 - La entidad actual es `bovinos`, aunque todavia existen nombres heredados como `vacas` en componentes, comentarios y algunos textos.
 - Las rutas antiguas `/vacas` redirigen a `/bovinos`.
-- El frontend envia `usuario_id` en query o body para filtrar datos.
-- La autenticacion actual es client-side y depende de `localStorage`.
+- Algunas paginas todavia envian `usuario_id` por compatibilidad, pero el backend lo ignora y usa la sesion firmada.
+- `localStorage` solo mantiene la representacion visual del usuario; no concede acceso a datos.
+- Todas las relaciones se validan contra el usuario autenticado antes de leer o escribir.
+- Las fechas vacias se convierten a `null`; IDs, numeros, fechas, enums y textos se normalizan en el servidor.
+- Los errores API se serializan sin SQL, parametros, stack traces ni rutas locales.
 - Para llamadas de lectura se usa normalmente `useFetch`.
 - Para acciones de escritura se usa normalmente `$fetch`.
 - Para el chat IA con streaming se usa `fetch` nativo.
@@ -262,22 +285,27 @@ npm run postinstall
 - Cada cambio importante en datos de un bovino deberia reconstruir su contexto semantico con `rebuildBovinoContext`.
 - Las validaciones de bovinos estan centralizadas parcialmente en `lib/bovinoValidation.ts`.
 - El router de IA prefiere reglas y consultas concretas antes de invocar el modelo.
+- El planner determinista se ejecuta antes de la busqueda por bovino para evitar falsos positivos como interpretar `tengo` o `registrados` como nombres.
+- Las acciones incompletas no deben llamar al LLM ni a la base de datos: deben crear una accion pendiente y pedir solo los campos faltantes.
+- Las acciones sensibles, como eliminar o transferir propiedad, requieren confirmacion antes de ejecutarse.
+- El estado pendiente se guarda en memoria del servidor; si se reinicia Nuxt, se pierde.
 - El modelo no debe inventar informacion: el prompt del RAG exige usar memorias, contexto ganadero e historial.
 
 ## Pendientes o riesgos detectados
 
-- Las contrasenas se guardan y comparan en texto plano.
-- No hay autenticacion server-side real, JWT, cookies seguras ni sesiones.
-- El backend confia en `usuario_id` enviado por el cliente.
+- Los usuarios legacy de seeds conservan inicialmente contrasenas en texto plano, pero se migran a scrypt en su siguiente login.
+- La sesion es stateless y firmada; no existe revocacion central antes de su expiracion de 12 horas.
 - Las credenciales de PostgreSQL estan hardcodeadas en varios archivos.
 - Hay mezcla de Drizzle y SQL directo, lo que puede complicar mantenimiento.
 - `database/schema.sql`, `database/seeds.sql` y `drizzle/schema.ts` no estan completamente sincronizados.
-- `memories` en `seeds.sql` tiene columnas `slot`, `tipo` y `updated_at`, pero el schema Drizzle visible no las declara.
+- `memories` ya declara `slot`, `tipo` y `updated_at` en Drizzle, aunque los tres esquemas aun deben mantenerse sincronizados manualmente.
 - Hay problemas de encoding en textos con acentos, por ejemplo `GanaderÃ­a` y `DueÃ±os`.
 - El README menciona Nuxt 3, pero el proyecto usa Nuxt 4 en `package.json`.
-- No hay script de test definido en `package.json`.
-- La configuracion de Playwright no tiene `baseURL` ni `webServer` activo.
-- La prueba `e2e/ia.spec.ts` usa credenciales que no aparecen en los seeds visibles.
-- `/api/reindexar` contiene un bug: devuelve `bovinos.length`, pero la variable declarada es `vacas`.
+- La suite unitaria cubre extraccion, datos faltantes, confirmaciones, consultas y contexto; la seguridad de endpoints tambien se verifico con dos sesiones reales, pero falta automatizar esa prueba de integracion en CI.
 - La carpeta `node_modules`, `.nuxt`, `playwright-report` y `test-results` existen localmente; conviene no tratarlas como fuente principal.
 - Hay deuda terminologica por la migracion de `vacas` a `bovinos`.
+- El estado multi-turno de acciones pendientes es temporal en memoria; no sobrevive reinicios ni multiples instancias del servidor.
+- El planner cubre las intenciones principales, pero operaciones menos usadas pueden seguir cayendo al function calling legacy.
+- `numero_arete` sigue siendo unico globalmente en PostgreSQL, no unico por usuario.
+- Varias tools legacy aun crean su propio cliente PostgreSQL con credenciales locales; los endpoints principales ya usan `DATABASE_URL`, pero falta terminar esa unificacion.
+- No existe una regla configurable de peso minimo para venta. La IA ahora declara que no puede decidir en vez de asumir 180 kg.

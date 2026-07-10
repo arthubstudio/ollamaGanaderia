@@ -1,63 +1,25 @@
-import postgres from "postgres";
+import { sql } from "~/lib/db";
+import { apiError, requiredText, runApi } from "~/server/utils/api";
+import { hashPassword } from "~/server/utils/session";
 
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
-);
-
-export default defineEventHandler(async (event) => {
-
+export default defineEventHandler(async (event) => runApi(async () => {
   const body = await readBody(event);
+  const nombre = requiredText(body?.nombre, "nombre", 100);
+  const email = requiredText(body?.email, "email", 150).toLowerCase();
+  const password = requiredText(body?.password, "password", 200);
 
-  const existe = await sql`
-
-    SELECT id
-
-    FROM usuarios
-
-    WHERE email = ${body.email}
-
-    LIMIT 1
-
-  `;
-
-  if (existe.length) {
-
-    throw createError({
-
-      statusCode: 400,
-
-      statusMessage:
-        "El correo ya existe"
-
-    });
-
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    apiError({ statusCode: 400, code: "INVALID_EMAIL", message: "El correo no es valido." });
+  }
+  if (password.length < 6) {
+    apiError({ statusCode: 400, code: "WEAK_PASSWORD", message: "La contrasena debe tener al menos 6 caracteres." });
   }
 
-  const usuario = await sql`
-
-    INSERT INTO usuarios (
-
-      nombre,
-      email,
-      password_hash
-
-    )
-
-    VALUES (
-
-      ${body.nombre},
-      ${body.email},
-      ${body.password}
-
-    )
-
-    RETURNING *
-
+  const rows = await sql`
+    INSERT INTO usuarios (nombre, email, password_hash)
+    VALUES (${nombre}, ${email}, ${hashPassword(password)})
+    RETURNING id, nombre, email, rol, created_at
   `;
 
-  return usuario[0];
-
-});
+  return rows[0];
+}));

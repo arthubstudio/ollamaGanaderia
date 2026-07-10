@@ -1,52 +1,22 @@
-import { db } from "~/lib/db";
-import { pesos, bovinos } from "~/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { sql } from "~/lib/db";
+import { apiError, optionalDate, parseId, positiveNumber, runApi } from "~/server/utils/api";
+import { requireUserId } from "~/server/utils/session";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
-
-export default defineEventHandler(async (event) => {
-  const id = Number(event.context.params?.id);
+export default defineEventHandler(async (event) => runApi(async () => {
+  const userId = requireUserId(event);
+  const id = parseId(event.context.params?.id);
   const body = await readBody(event);
-
-  const usuarioId = Number(body.usuario_id);
-
-  if (!id || !usuarioId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Faltan datos"
-    });
-  }
-
-  const pesoExistente = await db
-    .select({
-      id: pesos.id,
-      bovino_id: pesos.bovino_id,
-    })
-    .from(pesos)
-    .innerJoin(bovinos, eq(pesos.bovino_id, bovinos.id))
-    .where(
-      and(
-        eq(pesos.id, id),
-        eq(bovinos.usuario_id, usuarioId)
-      )
-    );
-
-  if (!pesoExistente.length) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: "Peso no encontrado"
-    });
-  }
-
-  const result = await db
-    .update(pesos)
-    .set({
-      peso: body.peso,
-      fecha: body.fecha,
-    })
-    .where(eq(pesos.id, id))
-    .returning();
-
-  await rebuildBovinoContext(pesoExistente[0].bovino_id);
-
-  return result[0];
-});
+  const existing = await sql`
+    SELECT p.id, p.bovino_id FROM pesos p
+    JOIN bovinos b ON b.id = p.bovino_id
+    WHERE p.id = ${id} AND b.usuario_id = ${userId} LIMIT 1
+  `;
+  if (!existing.length) apiError({ statusCode: 404, code: "NOT_FOUND", message: "Peso no encontrado." });
+  const rows = await sql`
+    UPDATE pesos SET peso = ${positiveNumber(body?.peso, "El peso")},
+      fecha = ${optionalDate(body?.fecha, "La fecha") ?? new Date().toISOString().slice(0, 10)}
+    WHERE id = ${id} RETURNING *
+  `;
+  await rebuildBovinoContext(Number(existing[0].bovino_id));
+  return rows[0];
+}));

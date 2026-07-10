@@ -290,6 +290,7 @@ npm run postinstall
 - Las acciones sensibles, como eliminar o transferir propiedad, requieren confirmacion antes de ejecutarse.
 - El estado pendiente se guarda en memoria del servidor; si se reinicia Nuxt, se pierde.
 - El modelo no debe inventar informacion: el prompt del RAG exige usar memorias, contexto ganadero e historial.
+- Un bovino esta listo para venta solo si su ultimo peso registrado es de al menos 550 kg y tiene aplicadas Brucelosis, Clostridiales, Complejo Respiratorio y Rabia. La evaluacion usa exclusivamente datos del usuario autenticado.
 
 ## Pendientes o riesgos detectados
 
@@ -308,4 +309,3 @@ npm run postinstall
 - El planner cubre las intenciones principales, pero operaciones menos usadas pueden seguir cayendo al function calling legacy.
 - `numero_arete` sigue siendo unico globalmente en PostgreSQL, no unico por usuario.
 - Varias tools legacy aun crean su propio cliente PostgreSQL con credenciales locales; los endpoints principales ya usan `DATABASE_URL`, pero falta terminar esa unificacion.
-- No existe una regla configurable de peso minimo para venta. La IA ahora declara que no puede decidir en vez de asumir 180 kg.

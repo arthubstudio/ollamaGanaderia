@@ -810,9 +810,27 @@ export default defineEventHandler(async (event) => {
       }
 
       if (query.target === "venta_listos") {
-        return await finish("sql", "No puedo listar bovinos listos para venta porque no hay una regla de peso minimo configurada.", {
-          tools: toolsExecuted
-        });
+        const bovinosVenta = await sql`
+          SELECT nombre FROM bovinos
+          WHERE usuario_id = ${usuarioId}
+            AND LOWER(COALESCE(estado, 'activa')) NOT IN ('vendida', 'vendido', 'baja')
+          ORDER BY nombre
+        `;
+        const aptos: string[] = [];
+        for (const bovino of bovinosVenta) {
+          const evaluacion: any = await event.$fetch("/api/ia/venta", {
+            method: "POST",
+            body: { nombre: bovino.nombre }
+          });
+          if (evaluacion.lista) aptos.push(String(bovino.nombre));
+        }
+        return await finish(
+          "sql",
+          aptos.length
+            ? `Bovinos listos para venta:\n${aptos.map((nombre) => `- ${nombre}`).join("\n")}`
+            : "No tienes bovinos que cumplan actualmente con el peso minimo y todas las vacunas obligatorias.",
+          { tools: toolsExecuted }
+        );
       }
     }
 
@@ -833,15 +851,11 @@ export default defineEventHandler(async (event) => {
 
       const bovino = rows[0];
       setIaConversationBovino(conversationId, usuarioId, bovino, "verificar_venta");
-      const pesos = await sql`
-        SELECT peso, fecha FROM pesos WHERE bovino_id = ${bovino.id}
-        ORDER BY fecha DESC NULLS LAST, id DESC LIMIT 1
-      `;
-      if (!pesos.length) {
-        return await finish("sql", `No puedo determinar si ${bovino.nombre} esta lista para venta porque no tiene un peso registrado.`, { tools: toolsExecuted });
-      }
-
-      return await finish("sql", `${bovino.nombre} tiene un peso registrado de ${pesos[0].peso} kg, pero no puedo determinar si esta lista para venta porque no hay una regla de peso minimo configurada.`, { tools: toolsExecuted });
+      const evaluacion: any = await event.$fetch("/api/ia/venta", {
+        method: "POST",
+        body: { nombre: bovino.nombre }
+      });
+      return await finish("sql", evaluacion.respuesta, { tools: toolsExecuted });
     }
 
     if (query.type === "search" && query.target === "bovino_arete") {

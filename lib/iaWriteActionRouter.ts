@@ -126,14 +126,13 @@ export function inferReadAction(
 
 export function inferCrearBovino(pregunta: string): InferredAction | null {
   const parsed = parseBovinoFieldsFromText(pregunta);
-  if (!parsed?.numero_arete || !parsed.nombre || !parsed.raza || !parsed.sexo) {
+  if (!parsed?.nombre || !parsed.raza || !parsed.sexo) {
     return null;
   }
 
   return {
     tool: "crearBovino",
     args: {
-      numero_arete: parsed.numero_arete,
       nombre: parsed.nombre,
       raza: parsed.raza,
       sexo: parsed.sexo

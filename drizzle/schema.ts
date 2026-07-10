@@ -195,6 +195,15 @@ export const bovinos = pgTable(
   }
 );
 
+export const bovinoAreteSequences = pgTable(
+  "bovino_arete_sequences",
+  {
+    usuario_id: integer("usuario_id").primaryKey(),
+    last_value: integer("last_value").notNull(),
+    updated_at: timestamp("updated_at").defaultNow()
+  }
+);
+
 
 
 // =====================================

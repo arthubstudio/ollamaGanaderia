@@ -8,8 +8,6 @@ const usuario =
 
 const form = reactive({
 
-  numero_arete: "",
-
   nombre: "",
 
   raza: "",
@@ -36,7 +34,6 @@ async function crearBovino() {
   }
 
   if (
-    !form.numero_arete ||
     !form.nombre ||
     !form.raza ||
     !form.sexo
@@ -125,7 +122,7 @@ async function crearBovino() {
       >
 
         <input
-          v-model="form.numero_arete"
+          v-if="false"
           placeholder="Número arete"
           class="w-full border border-gray-200 rounded-2xl p-4"
         />

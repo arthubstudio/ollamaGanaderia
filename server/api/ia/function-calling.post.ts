@@ -128,15 +128,6 @@ function normalizeToolArguments(
   }
 
   if (toolName === "crearBovino") {
-    if (!normalized.numero_arete) {
-      normalized.numero_arete = firstTextValue(normalized, [
-        "numero_arete",
-        "arete",
-        "identificador",
-        "numero"
-      ]);
-    }
-
     if (!normalized.raza) {
       normalized.raza = firstTextValue(normalized, ["raza", "breed"]);
     }
@@ -533,14 +524,13 @@ function buildToolSchemas() {
         parameters: {
           type: "object",
           properties: {
-            numero_arete: { type: "string", description: "Identificador corto del arete, ej. A-101" },
             nombre: { type: "string", description: "Nombre corto del bovino, máx. 5 palabras" },
             raza: { type: "string", description: "Raza del bovino, ej. Holstein, Angus" },
             sexo: { type: "string", description: "Solo Hembra (vaca) o Macho (toro)" },
             fecha_nacimiento: { type: "string", description: "Fecha YYYY-MM-DD (opcional)" },
             estado: { type: "string", description: "activa, vendida, etc. (opcional)" }
           },
-          required: ["numero_arete", "nombre", "raza", "sexo"]
+          required: ["nombre", "raza", "sexo"]
         }
       }
     },
@@ -672,7 +662,6 @@ async function executeToolCall(
     case "crearBovino":
       return crearBovino(
         {
-          numero_arete: String(argumentos.numero_arete ?? ""),
           nombre: String(argumentos.nombre ?? ""),
           raza: String(argumentos.raza ?? ""),
           sexo: String(argumentos.sexo ?? ""),
@@ -1057,7 +1046,7 @@ Reglas para vacunas vs enfermedades vs consultas (MUY IMPORTANTE):
 
 Reglas estrictas para registrar bovinos:
 - NO uses frases, bromas, párrafos ni texto conversacional como datos.
-- Cada campo debe ser corto y concreto: arete (ej. A-101), nombre (ej. Lola), raza (ej. Holstein), sexo (Hembra o Macho).
+- Cada campo debe ser corto y concreto: nombre (ej. Lola), raza (ej. Holstein), sexo (Hembra o Macho). El arete se genera automaticamente y no debe pedirse al usuario.
 - Si falta algún dato obligatorio o el usuario responde con texto confuso, NO llames crearBovino. Pregunta solo por el dato faltante, uno a la vez.
 - Si el usuario mezcla "vaca" con sexo masculino, explícale que debe elegir Hembra o registrar un toro (Macho).
 

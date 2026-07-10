@@ -283,6 +283,8 @@ npm run postinstall
   - Drizzle ORM con `db`
   - SQL directo con `postgres`
 - Cada cambio importante en datos de un bovino deberia reconstruir su contexto semantico con `rebuildBovinoContext`.
+- Al registrar bovinos, el servidor genera el arete `MX-0001` por usuario. El consecutivo vive en `bovino_arete_sequences`, se incrementa de forma atomica dentro de la misma transaccion del alta y no se reutiliza si se elimina un bovino.
+- La unicidad del arete es por usuario (`usuario_id`, `numero_arete`); se conserva la busqueda por arete dentro de la cuenta autenticada.
 - Las validaciones de bovinos estan centralizadas parcialmente en `lib/bovinoValidation.ts`.
 - El router de IA prefiere reglas y consultas concretas antes de invocar el modelo.
 - El planner determinista se ejecuta antes de la busqueda por bovino para evitar falsos positivos como interpretar `tengo` o `registrados` como nombres.

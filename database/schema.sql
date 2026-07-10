@@ -18,7 +18,7 @@ CREATE TABLE usuarios (
 CREATE TABLE bovinos (
     id SERIAL PRIMARY KEY,
     usuario_id INT NOT NULL REFERENCES usuarios(id),
-    numero_arete VARCHAR(50) UNIQUE NOT NULL,
+    numero_arete VARCHAR(50) NOT NULL,
     nombre VARCHAR(100),
     raza VARCHAR(100),
     sexo VARCHAR(20),
@@ -29,6 +29,13 @@ CREATE TABLE bovinos (
 );
 
 CREATE INDEX bovinos_usuario_id_idx ON bovinos(usuario_id);
+CREATE UNIQUE INDEX bovinos_usuario_arete_uq ON bovinos(usuario_id, UPPER(numero_arete));
+
+CREATE TABLE bovino_arete_sequences (
+    usuario_id INT PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
+    last_value INT NOT NULL CHECK (last_value >= 0),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
 
 -- =====================================================
 -- DUEÑOS

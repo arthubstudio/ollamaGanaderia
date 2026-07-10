@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { planIaTurn, __test } from "../lib/iaActionPlanner.js";
 import { extractBovinoEntities } from "../lib/bovinoEntityExtractor.js";
+import { formatAreteConsecutivo } from "../lib/areteFormat.js";
 
 test("detecta conteo sin interpretar tengo como bovino", () => {
   const plan = planIaTurn({
@@ -46,7 +47,7 @@ test("registra bovino incompleto conservando datos presentes", () => {
   assert.equal(plan.kind, "pending");
   assert.equal(plan.pending.tool, "crearBovino");
   assert.equal(plan.pending.args.nombre, "Lulu");
-  assert.deepEqual(plan.pending.missing, ["numero_arete", "sexo", "raza"]);
+  assert.deepEqual(plan.pending.missing, ["sexo", "raza"]);
 });
 
 test("completa una accion pendiente en varios turnos", () => {
@@ -58,13 +59,12 @@ test("completa una accion pendiente en varios turnos", () => {
   assert.equal(first.kind, "pending");
 
   const second = planIaTurn({
-    text: "Se llama Lulu y su arete es MC323.",
+    text: "Se llama Lulu.",
     pending: first.pending
   });
 
   assert.equal(second.kind, "pending");
   assert.equal(second.pending.args.nombre, "Lulu");
-  assert.equal(second.pending.args.numero_arete, "MC323");
   assert.deepEqual(second.pending.missing, ["sexo", "raza"]);
 
   const third = planIaTurn({
@@ -76,6 +76,7 @@ test("completa una accion pendiente en varios turnos", () => {
   assert.equal(third.pending.awaitingConfirmation, true);
   assert.equal(third.pending.args.sexo, "Macho");
   assert.equal(third.pending.args.raza, "Brahman");
+  assert.match(third.respuesta, /arete se generara automaticamente/i);
 });
 
 test("no ejecuta eliminacion sin confirmacion", () => {
@@ -209,4 +210,11 @@ test("pide bovino cuando se cambia peso sin contexto", () => {
   assert.equal(plan.kind, "pending");
   assert.equal(plan.pending.tool, "registrarPeso");
   assert.deepEqual(plan.pending.missing, ["nombre"]);
+});
+
+test("formatea aretes consecutivos con cuatro digitos", () => {
+  assert.equal(formatAreteConsecutivo(1), "MX-0001");
+  assert.equal(formatAreteConsecutivo(42), "MX-0042");
+  assert.equal(formatAreteConsecutivo(9999), "MX-9999");
+  assert.throws(() => formatAreteConsecutivo(10000), /ARETE_SEQUENCE_EXHAUSTED/);
 });

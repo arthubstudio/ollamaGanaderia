@@ -128,6 +128,8 @@ export type DatosBovinoInput = {
   sexo: string;
 };
 
+export type DatosBovinoRegistroInput = Omit<DatosBovinoInput, "numero_arete">;
+
 export function validarDatosBovino(
   datos: DatosBovinoInput
 ): { ok: true; datos: DatosBovinoInput & { sexo: SexoBovino } } | ValidationErr {
@@ -169,6 +171,27 @@ export function validarDatosBovino(
   };
 }
 
+export function validarDatosBovinoRegistro(
+  datos: DatosBovinoRegistroInput
+): { ok: true; datos: DatosBovinoRegistroInput & { sexo: SexoBovino } } | ValidationErr {
+  const nombre = validarNombre(datos.nombre);
+  if (!nombre.ok) return nombre;
+  const raza = validarRaza(datos.raza);
+  if (!raza.ok) return raza;
+  const sexo = normalizarSexo(datos.sexo);
+  if (!sexo.ok) return sexo;
+
+  const nombreLower = nombre.valor.toLowerCase();
+  if (/\bvaca\b/.test(nombreLower) && sexo.sexo === "Macho") {
+    return { ok: false, error: "Una vaca no puede tener sexo masculino. Usa Hembra o cambia el nombre si es un toro." };
+  }
+  if (/\btoro\b/.test(nombreLower) && sexo.sexo === "Hembra") {
+    return { ok: false, error: "Un toro no puede tener sexo hembra. Usa Macho o corrige el nombre." };
+  }
+
+  return { ok: true, datos: { nombre: nombre.valor, raza: raza.valor, sexo: sexo.sexo } };
+}
+
 export function mensajeDatosBovinoFaltantes(): string {
-  return "Faltan datos obligatorios: número de arete, nombre, raza y sexo (Hembra o Macho). Pide un dato a la vez, con valores cortos y concretos.";
+  return "Faltan datos obligatorios: nombre, raza y sexo (Hembra o Macho). El numero de arete se genera automaticamente.";
 }

@@ -72,7 +72,7 @@ app/
     auth.vue                 Layout de login/registro
 
   middleware/
-    auth.ts                  Middleware client-side basado en localStorage
+    auth.ts                  Middleware client-side que valida la cookie con `/api/auth/me`
 
   components/                Componentes Vue reutilizables
     vacas/                   Componentes heredados con nombre anterior
@@ -148,7 +148,7 @@ app/
    - `localStorage`
    - `useState("usuario")`
 
-8. Las paginas protegidas conservan `localStorage` para estado visual, pero la autorizacion real ocurre en Nitro mediante la cookie de sesion.
+8. Las paginas protegidas validan la cookie contra `/api/auth/me`; `localStorage` solo se actualiza despues de confirmar una sesion valida.
 
 9. El dashboard consulta `/api/dashboard?usuario_id=...`.
 
@@ -272,7 +272,8 @@ npm run postinstall
 - La entidad actual es `bovinos`, aunque todavia existen nombres heredados como `vacas` en componentes, comentarios y algunos textos.
 - Las rutas antiguas `/vacas` redirigen a `/bovinos`.
 - Algunas paginas todavia envian `usuario_id` por compatibilidad, pero el backend lo ignora y usa la sesion firmada.
-- `localStorage` solo mantiene la representacion visual del usuario; no concede acceso a datos.
+- `localStorage` solo mantiene la representacion visual del usuario despues de validar `/api/auth/me`; no concede acceso a datos.
+- La pantalla `/login` limpia el estado local y cierra cualquier cookie de sesion previa para evitar que aparezca una cuenta activa en el formulario.
 - Todas las relaciones se validan contra el usuario autenticado antes de leer o escribir.
 - Las fechas vacias se convierten a `null`; IDs, numeros, fechas, enums y textos se normalizan en el servidor.
 - Los errores API se serializan sin SQL, parametros, stack traces ni rutas locales.
@@ -309,5 +310,5 @@ npm run postinstall
 - Hay deuda terminologica por la migracion de `vacas` a `bovinos`.
 - El estado multi-turno de acciones pendientes es temporal en memoria; no sobrevive reinicios ni multiples instancias del servidor.
 - El planner cubre las intenciones principales, pero operaciones menos usadas pueden seguir cayendo al function calling legacy.
-- `numero_arete` sigue siendo unico globalmente en PostgreSQL, no unico por usuario.
+- La secuencia automatica de aretes ya evita reutilizar consecutivos por usuario; aun falta automatizar una prueba de concurrencia de base de datos en CI.
 - Varias tools legacy aun crean su propio cliente PostgreSQL con credenciales locales; los endpoints principales ya usan `DATABASE_URL`, pero falta terminar esa unificacion.

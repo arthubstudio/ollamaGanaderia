@@ -1,35 +1,15 @@
-export default defineNuxtRouteMiddleware(() => {
+export default defineNuxtRouteMiddleware(async () => {
+  if (!process.client) return;
 
-  if (process.client) {
+  const usuario = useState<any>("usuario", () => null);
 
-    const usuarioGuardado =
-      localStorage.getItem(
-        "usuario"
-      );
-
-    if (!usuarioGuardado) {
-
-      return navigateTo(
-        "/login"
-      );
-
-    }
-
-    const usuario =
-      useState<any>(
-        "usuario",
-        () => null
-      );
-
-    if (!usuario.value) {
-
-      usuario.value =
-        JSON.parse(
-          usuarioGuardado
-        );
-
-    }
-
+  try {
+    const sessionUser = await $fetch("/api/auth/me");
+    usuario.value = sessionUser;
+    localStorage.setItem("usuario", JSON.stringify(sessionUser));
+  } catch {
+    usuario.value = null;
+    localStorage.removeItem("usuario");
+    return navigateTo("/login");
   }
-
 });

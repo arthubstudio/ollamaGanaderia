@@ -4,15 +4,19 @@ definePageMeta({
 });
 
 const route = useRoute();
-const email = ref("pedro@gmail.com");
-const password = ref("123456");
+const email = ref("");
+const password = ref("");
 const loading = ref(false);
 const errorMsg = ref("");
 const successMsg = ref("");
 
 const usuario = useState<any>("usuario", () => null);
 
-onMounted(() => {
+onMounted(async () => {
+  usuario.value = null;
+  localStorage.removeItem("usuario");
+  await $fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+
   if (route.query.registrado === "1") {
     successMsg.value = "¡Cuenta creada exitosamente! Ya puedes iniciar sesión.";
   }
@@ -165,9 +169,6 @@ async function login() {
             </NuxtLink>
           </p>
 
-          <p class="mt-4 text-center text-xs text-stone-400">
-            Demo: pedro@gmail.com · 123456
-          </p>
         </div>
       </div>
     </div>

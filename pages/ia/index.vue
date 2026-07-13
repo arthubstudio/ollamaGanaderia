@@ -38,15 +38,6 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function tipoEstado(estadoActual: string) {
-  const texto = estadoActual.toLowerCase();
-  if (texto.includes("bloqueada") || texto.includes("seguridad")) return "bloqueado";
-  if (texto.includes("buscando") || texto.includes("recuperando") || texto.includes("consultando")) return "buscar";
-  if (texto.includes("ejecutando") || texto.includes("guardando")) return "accion";
-  if (texto.includes("recibiendo")) return "stream";
-  return "pensando";
-}
-
 function scrollAlFinal() {
   nextTick(() => {
     if (chatContainer.value) {
@@ -55,7 +46,7 @@ function scrollAlFinal() {
   });
 }
 
-watch([mensajes, estado, loading], scrollAlFinal, { deep: true });
+watch([mensajes, loading], scrollAlFinal, { deep: true });
 
 function iniciarReconocimientoVoz() {
   if (!process.client) return;
@@ -368,27 +359,6 @@ function detenerStream() {
           </div>
         </template>
 
-        <div
-          v-if="estado && mensajes.length"
-          class="flex justify-start pl-11"
-        >
-          <div
-            class="inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium border"
-            :class="{
-              'bg-blue-50 border-blue-100 text-blue-700': tipoEstado(estado) === 'pensando',
-              'bg-amber-50 border-amber-100 text-amber-700': tipoEstado(estado) === 'buscar',
-              'bg-purple-50 border-purple-100 text-purple-700': tipoEstado(estado) === 'accion',
-              'bg-emerald-50 border-emerald-100 text-emerald-700': tipoEstado(estado) === 'stream',
-              'bg-red-50 border-red-100 text-red-700': tipoEstado(estado) === 'bloqueado'
-            }"
-          >
-            <span
-              v-if="tipoEstado(estado) !== 'bloqueado'"
-              class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"
-            />
-            {{ estado }}
-          </div>
-        </div>
       </div>
 
       <div class="shrink-0 border-t border-stone-100 bg-stone-50/80 p-3 sm:p-4">

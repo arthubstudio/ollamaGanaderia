@@ -25,6 +25,7 @@ import {
   resolveAnimalFromContext
 } from "~/lib/conversationContext";
 import { planIaTurn } from "~/lib/iaActionPlanner.js";
+import { memoryConfirmation, memoryToUserPerspective } from "~/lib/iaMemoryPerspective.js";
 import {
   clearPendingIaAction,
   getIaConversationContext,
@@ -34,6 +35,17 @@ import {
 } from "~/lib/iaConversationState.js";
 import { apiError } from "~/server/utils/api";
 import { requireUserId } from "~/server/utils/session";
+import {
+  routeIaMessage,
+  type AgentRoute
+} from "~/server/ai/agents/routerAgent";
+import {
+  buildAgentContext,
+  type AgentContext
+} from "~/server/ai/context/agentContext";
+import { runTransactionalAgent } from "~/server/ai/agents/transactionalAgent";
+import { runRagAgent } from "~/server/ai/agents/ragAgent";
+import type { RagMetrics } from "~/server/ai/rag/advancedRagPipeline";
 
 type ChatBody = {
   pregunta?: string;
@@ -49,6 +61,31 @@ type ToolExecution = {
   result?: unknown;
   error?: string;
 };
+
+let observabilitySchemaReady: Promise<void> | null = null;
+
+function ensureObservabilitySchema() {
+  if (!observabilitySchemaReady) {
+    observabilitySchemaReady = sql`
+      ALTER TABLE ai_logs
+        ADD COLUMN IF NOT EXISTS selected_agent VARCHAR(32),
+        ADD COLUMN IF NOT EXISTS intent VARCHAR(100),
+        ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4),
+        ADD COLUMN IF NOT EXISTS route_reason TEXT,
+        ADD COLUMN IF NOT EXISTS context_sources TEXT,
+        ADD COLUMN IF NOT EXISTS retrieved_count INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS reranked_count INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS reranker_used INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS retrieval_latency_ms INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS rerank_latency_ms INTEGER DEFAULT 0
+    `.then(() => undefined).catch((error) => {
+      observabilitySchemaReady = null;
+      throw error;
+    });
+  }
+
+  return observabilitySchemaReady;
+}
 
 function normalizeText(value: string) {
   return (value ?? "")
@@ -125,7 +162,7 @@ function detectMemoryWrite(text: string) {
       slot: "vaca_favorita",
       tipo: "preferencia",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -137,7 +174,7 @@ function detectMemoryWrite(text: string) {
       slot: "vaca_favorita",
       tipo: "preferencia",
       contenido,
-      respuesta: `Entendido, recordaré que ${contenido}.`
+      respuesta: memoryConfirmation(contenido)
     };
   }
 
@@ -146,7 +183,7 @@ function detectMemoryWrite(text: string) {
       slot: "rancho_favorito",
       tipo: "preferencia",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -155,7 +192,7 @@ function detectMemoryWrite(text: string) {
       slot: "proveedor_favorito",
       tipo: "preferencia",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -167,7 +204,7 @@ function detectMemoryWrite(text: string) {
       slot: "dueno_favorito",
       tipo: "preferencia",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -188,7 +225,7 @@ function detectMemoryWrite(text: string) {
       slot,
       tipo: "preferencia",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -201,7 +238,7 @@ function detectMemoryWrite(text: string) {
       slot: slug(subject),
       tipo: "hecho",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -210,7 +247,7 @@ function detectMemoryWrite(text: string) {
       slot: "me_gusta",
       tipo: "gusto",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -219,7 +256,7 @@ function detectMemoryWrite(text: string) {
       slot: "no_me_gusta",
       tipo: "disgusto",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -228,7 +265,7 @@ function detectMemoryWrite(text: string) {
       slot: "preferencia",
       tipo: "preferencia",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -237,7 +274,7 @@ function detectMemoryWrite(text: string) {
       slot: "identidad",
       tipo: "identidad",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -246,7 +283,7 @@ function detectMemoryWrite(text: string) {
       slot: "vivo_en",
       tipo: "ubicacion",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -255,7 +292,7 @@ function detectMemoryWrite(text: string) {
       slot: "trabajo_en",
       tipo: "ocupacion",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -270,7 +307,7 @@ function detectMemoryWrite(text: string) {
       slot: `rel_${subject}_odia_${target}`,
       tipo: "relacion",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -285,7 +322,7 @@ function detectMemoryWrite(text: string) {
       slot: `fact_${subject}`,
       tipo: "hecho",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré que ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -307,7 +344,7 @@ function detectMemoryWrite(text: string) {
       slot: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       tipo: "general",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré: ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -523,6 +560,15 @@ export default defineEventHandler(async (event) => {
   const sessionId = conversationId ?? `user:${usuarioId ?? "anonymous"}`;
   const toolsExecuted: ToolExecution[] = [];
   let routerStage = "initialize";
+  let selectedRoute: AgentRoute = {
+    agent: "direct",
+    intent: "initialize",
+    confidence: 0,
+    reason: "Ruta pendiente de clasificacion."
+  };
+  let agentContext: AgentContext = { recentMessages: [] };
+  let ragMetrics: RagMetrics | null = null;
+  let contextSources: string[] = [];
 
   if (wantsStream) {
     setResponseHeader(event, "Content-Type", "text/event-stream; charset=utf-8");
@@ -545,6 +591,14 @@ export default defineEventHandler(async (event) => {
     : [];
 
   const historial = historialDesc.slice().reverse();
+
+  selectedRoute = routeIaMessage(preguntaOriginal, historial);
+  agentContext = buildAgentContext({
+    conversationId,
+    recentMessages: historial,
+    currentMessage: preguntaOriginal,
+    conversationState: getIaConversationContext(conversationId, usuarioId)
+  });
 
   async function insertConversationMessage(role: "user" | "assistant", content: string) {
     if (!conversationId) return;
@@ -578,6 +632,8 @@ export default defineEventHandler(async (event) => {
     const tokensPerSecond =
       tokenCount > 0 ? tokenCount / (generationMs / 1000) : null;
 
+    await ensureObservabilitySchema();
+
     await sql`
       INSERT INTO ai_logs (
         session_id,
@@ -588,7 +644,17 @@ export default defineEventHandler(async (event) => {
         total_latency_ms,
         tokens_per_second,
         was_blocked,
-        tools_executed
+        tools_executed,
+        selected_agent,
+        intent,
+        confidence,
+        route_reason,
+        context_sources,
+        retrieved_count,
+        reranked_count,
+        reranker_used,
+        retrieval_latency_ms,
+        rerank_latency_ms
       )
       VALUES (
         ${sessionId},
@@ -599,7 +665,17 @@ export default defineEventHandler(async (event) => {
         ${totalLatencyMs},
         ${tokensPerSecond},
         ${params.wasBlocked ? 1 : 0},
-        ${JSON.stringify(params.toolsExecuted)}
+        ${JSON.stringify(params.toolsExecuted)},
+        ${selectedRoute.agent},
+        ${selectedRoute.intent},
+        ${selectedRoute.confidence},
+        ${selectedRoute.reason},
+        ${JSON.stringify(contextSources)},
+        ${ragMetrics?.retrievedCount ?? 0},
+        ${ragMetrics?.rerankedCount ?? 0},
+        ${ragMetrics?.rerankerUsed ? 1 : 0},
+        ${ragMetrics?.retrievalLatencyMs ?? 0},
+        ${ragMetrics?.rerankLatencyMs ?? 0}
       )
     `;
   }
@@ -901,15 +977,14 @@ export default defineEventHandler(async (event) => {
     });
 
     try {
-      const response: any = await event.$fetch("/api/ia/function-calling", {
-        method: "POST",
-        body: {
-          pregunta: preguntaOriginal,
-          usuario_id: usuarioId,
-          conversation_id: conversationId,
-          direct_tool: tool,
-          direct_args: args
-        }
+      const response: any = await runTransactionalAgent({
+        event,
+        message: preguntaOriginal,
+        usuarioId,
+        conversationId,
+        context: agentContext,
+        directTool: tool,
+        directArgs: args
       });
 
       toolsExecuted[toolsExecuted.length - 1].result = response;
@@ -948,6 +1023,12 @@ export default defineEventHandler(async (event) => {
     // =====================================================
 
     if (detectPromptInjection(preguntaOriginal)) {
+      selectedRoute = {
+        agent: "direct",
+        intent: "security_block",
+        confidence: 1,
+        reason: "El guardrail detecto una instruccion potencialmente peligrosa."
+      };
       toolsExecuted.push({
         name: "guardrail.prompt_injection",
         status: "SUCCESS",
@@ -1055,6 +1136,12 @@ export default defineEventHandler(async (event) => {
     });
 
     if (plannedTurn.kind === "clear") {
+      selectedRoute = {
+        agent: "transactional",
+        intent: "transaction_cancelled",
+        confidence: 1,
+        reason: "El planner cancelo una accion transaccional pendiente."
+      };
       clearPendingIaAction(conversationId, usuarioId);
       return await finish("planner", plannedTurn.respuesta, {
         tools: toolsExecuted
@@ -1068,6 +1155,12 @@ export default defineEventHandler(async (event) => {
     }
 
     if (plannedTurn.kind === "pending") {
+      selectedRoute = {
+        agent: "transactional",
+        intent: "transaction_pending",
+        confidence: 1,
+        reason: "El planner requiere datos o confirmacion antes de ejecutar una tool."
+      };
       routerStage = "save-pending-action";
       setPendingIaAction(conversationId, usuarioId, plannedTurn.pending);
       routerStage = "respond-pending-action";
@@ -1077,6 +1170,12 @@ export default defineEventHandler(async (event) => {
     }
 
     if (plannedTurn.kind === "execute") {
+      selectedRoute = {
+        agent: "transactional",
+        intent: "transaction_execute",
+        confidence: 1,
+        reason: "El planner valido la confirmacion y delego la operacion al agente transaccional."
+      };
       if (plannedTurn.clearPending) {
         clearPendingIaAction(conversationId, usuarioId);
       }
@@ -1088,6 +1187,12 @@ export default defineEventHandler(async (event) => {
     }
 
     if (plannedTurn.kind === "query") {
+      selectedRoute = {
+        agent: "transactional",
+        intent: "database_query",
+        confidence: 1,
+        reason: "El planner resolvio una consulta concreta sobre PostgreSQL."
+      };
       return await runPlannerQuery(plannedTurn.query);
     }
 
@@ -1151,16 +1256,22 @@ export default defineEventHandler(async (event) => {
       });
 
       try {
-        const functionResponse = await event.$fetch("/api/ia/function-calling", {
-          method: "POST",
-          body: {
-            pregunta: preguntaParaAcciones,
-            usuario_id: usuarioId,
-            conversation_id: conversationId,
-            historial,
-            animal_context: animalMatch
-              ? { id: animalMatch.id, nombre: animalMatch.nombre }
-              : null
+        const functionResponse: any = await runTransactionalAgent({
+          event,
+          message: preguntaParaAcciones,
+          usuarioId,
+          conversationId,
+          context: {
+            ...agentContext,
+            ...(animalMatch
+              ? {
+                  lastBovino: {
+                    id: animalMatch.id,
+                    nombre: animalMatch.nombre,
+                    numero_arete: animalMatch.numero_arete
+                  }
+                }
+              : {})
           }
         });
 
@@ -1262,7 +1373,7 @@ export default defineEventHandler(async (event) => {
               .trim();
             respuestaMemoria = `Tu dueño favorito es ${nombre}.`;
           } else {
-            respuestaMemoria = exact.contenido;
+            respuestaMemoria = memoryToUserPerspective(exact.contenido);
           }
         }
       }
@@ -1271,7 +1382,7 @@ export default defineEventHandler(async (event) => {
         respuestaMemoria =
           "Esto encuentro relacionado:\n\n" +
           relacionadas
-            .map((m: any) => `• ${m.contenido}`)
+            .map((m: any) => `• ${memoryToUserPerspective(m.contenido)}`)
             .join("\n");
       }
 
@@ -1282,7 +1393,7 @@ export default defineEventHandler(async (event) => {
           respuestaMemoria =
             "Recuerdo lo siguiente:\n\n" +
             memoriesUsuario
-              .map((m: any) => `• ${m.contenido}`)
+              .map((m: any) => `• ${memoryToUserPerspective(m.contenido)}`)
               .join("\n");
         }
       }
@@ -1719,16 +1830,22 @@ export default defineEventHandler(async (event) => {
     });
 
     try {
-      const functionResponse = await event.$fetch("/api/ia/function-calling", {
-        method: "POST",
-        body: {
-          pregunta: preguntaParaAcciones,
-          usuario_id: usuarioId,
-          conversation_id: conversationId,
-          historial,
-          animal_context: animalMatch
-            ? { id: animalMatch.id, nombre: animalMatch.nombre }
-            : null
+      const functionResponse: any = await runTransactionalAgent({
+        event,
+        message: preguntaParaAcciones,
+        usuarioId,
+        conversationId,
+        context: {
+          ...agentContext,
+          ...(animalMatch
+            ? {
+                lastBovino: {
+                  id: animalMatch.id,
+                  nombre: animalMatch.nombre,
+                  numero_arete: animalMatch.numero_arete
+                }
+              }
+            : {})
         }
       });
 
@@ -2053,6 +2170,64 @@ ${enfermedadesRows.length}
     // FALLBACK RAG (STREAMING O NORMAL)
     // =====================================================
 
+    try {
+      const ragResult = await runRagAgent({
+        query: preguntaOriginal,
+        usuarioId,
+        context: agentContext,
+        stream: wantsStream,
+        onToken: wantsStream ? (token) => sseWrite({ token }) : undefined
+      });
+
+      ragMetrics = ragResult.metrics;
+      contextSources = [...new Set(
+        ragResult.retrievedContext.map((item) => item.source)
+      )];
+
+      toolsExecuted.push({
+        name: "rag.hybrid_search",
+        status: "SUCCESS",
+        params: { top_k: 10 },
+        result: {
+          retrieved_count: ragMetrics.retrievedCount,
+          retrieval_latency_ms: ragMetrics.retrievalLatencyMs,
+          sources: contextSources
+        }
+      });
+      toolsExecuted.push({
+        name: "rag.reranker",
+        status: ragMetrics.rerankerUsed ? "SUCCESS" : "ERROR",
+        params: { top_k: 3 },
+        result: {
+          reranker_used: ragMetrics.rerankerUsed,
+          reranked_count: ragMetrics.rerankedCount,
+          rerank_latency_ms: ragMetrics.rerankLatencyMs,
+          fallback: ragMetrics.rerankerFallback ?? null
+        }
+      });
+      toolsExecuted.push({
+        name: "ollama.chat",
+        status: "SUCCESS",
+        params: {
+          model: process.env.CHAT_MODEL ?? "llama3.2:latest",
+          stream: wantsStream,
+          agent: "rag"
+        }
+      });
+
+      return await finish("rag", ragResult.answer, {
+        ttftMs: ragResult.metrics.ttftMs || null,
+        alreadyStreamed: wantsStream,
+        tools: toolsExecuted
+      });
+    } catch (advancedRagError: any) {
+      toolsExecuted.push({
+        name: "rag.advanced_pipeline",
+        status: "ERROR",
+        error: String(advancedRagError?.message ?? advancedRagError)
+      });
+    }
+
     sseWrite({ estado: "Pensando..." });
 
     const memoriaRows = await sql`
@@ -2225,3 +2400,4 @@ ${enfermedadesRows.length}
     };
   }
 });
+

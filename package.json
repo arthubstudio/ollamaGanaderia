@@ -5,13 +5,18 @@
   "scripts": {
     "build": "nuxt build",
     "db:seed": "docker exec -i ganaderia_db psql -U ganaderia -d ganaderia_ai < database/seeds.sql",
+    "db:migrate:week7": "docker exec -i ganaderia_db psql -U ganaderia -d ganaderia_ai < database/migrations/003_semana_07_multiagente.sql",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "test": "node --test tests/iaActionPlanner.test.mjs tests/ventaReadiness.test.mjs",
+    "test": "tsx --test tests/iaActionPlanner.test.mjs tests/ventaReadiness.test.mjs tests/iaMemoryPerspective.test.mjs tests/routerAgent.test.ts tests/hybridSearch.test.ts tests/fullTextSearch.test.ts",
     "test:e2e": "playwright test",
-    "test:e2e:ia": "playwright test e2e/ia.spec.ts"
+    "test:e2e:ia": "playwright test e2e/ia.spec.ts",
+    "test:e2e:multi-agent": "playwright test e2e/ia.multi-agent.spec.ts",
+    "seed:stress": "tsx scripts/seed-stress.ts",
+    "evaluate:agent": "tsx scripts/evaluar-agente.ts",
+    "typecheck:scripts": "tsc --ignoreConfig --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck scripts/seed-stress.ts scripts/evaluar-agente.ts"
   },
   "dependencies": {
     "@nuxt/icon": "^2.2.3",
@@ -26,6 +31,10 @@
     "@nuxtjs/tailwindcss": "^6.14.0",
     "@playwright/test": "^1.61.1",
     "@types/node": "^26.0.1",
-    "drizzle-kit": "^0.31.10"
+    "@types/pdfkit": "^0.17.6",
+    "drizzle-kit": "^0.31.10",
+    "pdfkit": "^0.19.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
   }
 }

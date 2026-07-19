@@ -26,7 +26,9 @@ IA:
 - `llama3.2:latest`
 - `nomic-embed-text`
 - pgvector
-- RAG
+- Arquitectura multiagente
+- Busqueda hibrida vectorial + Full Text Search + RRF
+- Reranking local con fallback
 - Function Calling
 - Streaming SSE
 
@@ -66,6 +68,7 @@ Los datos persisten en los volumenes:
 
 - `postgres_data`
 - `ollama_data`
+- `reranker_cache` cuando se activa el perfil opcional del reranker
 
 En una base nueva, Docker ejecuta `database/seeds.sql` como script de inicializacion. Si el volumen ya existe, ejecuta el seed manualmente:
 
@@ -79,6 +82,28 @@ npm run db:seed
 docker exec -it ollamaganaderia ollama pull llama3.2:latest
 docker exec -it ollamaganaderia ollama pull nomic-embed-text
 ```
+
+## Migracion Semana 7
+
+En una base existente, aplica la migracion aditiva antes de usar observabilidad avanzada o el seeder:
+
+```bash
+npm run db:migrate:week7
+```
+
+`npm run db:seed` tambien crea de forma segura las columnas e indices nuevos porque usa `IF NOT EXISTS`.
+
+## Reranker local
+
+El flujo normal funciona aunque el reranker no este activo: usa los tres mejores resultados de RRF como fallback.
+
+Para iniciar el reranker local opcional:
+
+```bash
+docker compose --profile reranker up -d reranker
+```
+
+El primer arranque descarga `BAAI/bge-reranker-v2-m3` dentro de `reranker_cache`; es un modelo pesado y no se inicia ni descarga con `docker compose up -d`. Para hardware limitado se puede definir otro `RERANKER_MODEL` local compatible con `sentence-transformers`.
 
 ## Ejecutar la aplicacion
 
@@ -113,6 +138,12 @@ Ejecutar solo la prueba de IA:
 npm run test:e2e:ia
 ```
 
+Ejecutar las pruebas multiagente:
+
+```bash
+npm run test:e2e:multi-agent
+```
+
 Ver reporte de Playwright:
 
 ```bash
@@ -126,7 +157,9 @@ Con Cloudflare Tunnel:
 ```bash
 cloudflared tunnel --url http://localhost:3000
 ```
-
+```bash
+SELECT COUNT(*) FROM bovinos;
+```
 Con Ngrok:
 
 ```bash
@@ -134,6 +167,44 @@ ngrok http 3000
 ```
 
 ## Comandos utiles
+
+Sembrar un lote ficticio e idempotente de 10,000 registros:
+
+```bash
+npm run seed:stress -- --count=10000 --batch=semana07-10k
+```
+
+Sembrar 50,000 registros:
+
+```bash
+npm run seed:stress -- --count=50000 --batch=semana07-50k
+```
+
+Por defecto los contextos de estres no generan embeddings uno por uno. Para generar un subconjunto real de 100 embeddings:
+
+```bash
+npm run seed:stress -- --count=10000 --batch=semana07-emb --real-embeddings=100
+```
+
+Ejecutar la evaluacion completa con Ollama como juez local:
+
+```bash
+npm run evaluate:agent
+```
+
+Los resultados reales se escriben en:
+
+```text
+reports/evaluacion-semana-07.json
+reports/evaluacion-semana-07.md
+reports/evaluacion-semana-07.pdf
+```
+
+Prueba corta de tres casos, sin reemplazar el reporte final:
+
+```bash
+npm run evaluate:agent -- --limit=3 --output-suffix=smoke
+```
 
 Ver contenedores:
 
@@ -171,6 +242,32 @@ SELECT * FROM pesos;
 SELECT * FROM enfermedades;
 ```
 
+## Flujo Semana 7
+
+```text
+Usuario -> Router determinista -> Agente transaccional -> Tools -> PostgreSQL
+Usuario -> Router determinista -> Agente RAG -> Hybrid Search -> Reranker -> Ollama
+```
+
+- `/api/ia/router` conserva el streaming SSE usado por el chat.
+- `/api/ia/evaluate` ofrece una respuesta no streaming para pruebas y evaluacion.
+- El agente transaccional reutiliza las tools existentes y la confirmacion previa a escrituras.
+- El agente RAG no ejecuta escrituras y usa Top-10, RRF, reranker local y Top-3 final.
+- `/observabilidad` muestra agente, intencion, confianza, tools y metricas del RAG.
+
+## Comandos principales
+
+```bash
+npm install
+docker compose up -d
+npm run db:seed
+npm run dev
+npm run seed:stress -- --count=10000 --batch=semana07-10k
+npm run seed:stress -- --count=50000 --batch=semana07-50k
+npm run evaluate:agent
+npm run test:e2e
+```
+
 ## Notas para Semana 6
 
 - El flujo principal local es `npm install`, `docker compose up -d`, `npm run db:seed`, `npm run dev`.
@@ -180,10 +277,12 @@ SELECT * FROM enfermedades;
 
 ## Riesgos conocidos
 
-- La autenticacion actual se basa en `localStorage`.
-- Las contrasenas de demo estan en texto plano.
+- La autenticacion usa cookie HttpOnly firmada; los usuarios demo legacy actualizan su hash al iniciar sesion.
 - Hay credenciales locales hardcodeadas.
 - Algunos endpoints usan Drizzle y otros SQL directo.
 - `database/schema.sql`, `database/seeds.sql` y `drizzle/schema.ts` no estan completamente sincronizados.
 - Hay textos heredados con el nombre anterior `vacas`.
 - Hay problemas de encoding visibles en algunas vistas.
+- El reranker BGE requiere RAM, almacenamiento y una descarga inicial considerable.
+- El estado conversacional pendiente vive en memoria y no se comparte entre multiples instancias.
+- Las metricas de Semana 7 solo deben citarse despues de ejecutar el seeder y el evaluador en el equipo de entrega.

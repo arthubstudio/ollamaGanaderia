@@ -1,0 +1,240 @@
+{
+  "generated_at": "2026-07-17T19:49:07.300Z",
+  "models": {
+    "main": "llama3.2:latest",
+    "judge": "llama3.2:latest"
+  },
+  "database": {
+    "bovinos": 62,
+    "pesos": 40,
+    "enfermedades": 19,
+    "vacunas_aplicadas": 33,
+    "historial_propiedad": 16,
+    "semantic_contexts": 45,
+    "memories": 10,
+    "total": 225
+  },
+  "summary": {
+    "case_count": 3,
+    "routing_accuracy": 100,
+    "faithfulness": 100,
+    "parameter_accuracy": null,
+    "security": null,
+    "average_latency_ms": 79545.66666666667,
+    "score": 100
+  },
+  "conclusion": "La evaluacion local muestra un desempeno alto. Conviene revisar individualmente cualquier caso bajo 70 puntos.",
+  "results": [
+    {
+      "case": {
+        "id": "rag-health-brucellosis",
+        "category": "rag",
+        "prompt": "Explica como prevenir la brucelosis bovina.",
+        "expectedAgent": "rag",
+        "expectedKeywords": [
+          "brucelosis",
+          "vacun"
+        ]
+      },
+      "response": {
+        "answer": "Lo siento, pero no tengo información suficiente para proporcionar una respuesta detallada sobre cómo prevenir la brucelosis bovina en el contexto proporcionado.\n\nSin embargo, puedo ofrecerte algunos consejos generales sobre cómo prevenir la brucelosis bovina:\n\n1. **Vacunación**: La vacunación es una de las formas más efectivas de prevenir la brucelosis bovina. La vacuna contra la brucelosis debe ser administrada a todas las vacas que se encuentren en un rancho o establo donde se han detectado casos de la enfermedad.\n2. **Higiene y limpieza**: Mantener una buena higiene y limpieza en el rancho o establo es fundamental para prevenir la propagación de la enfermedad. Esto incluye eliminar cualquier material infectado, como leche o orina, y mantener las superficies y equipos limpios.\n3. **Control de gaderas**: El control de gaderas es crucial para evitar que las vacas se mezclen con otras vacas no inmunizadas o infectadas.\n4. **Monitoreo de la salud**: Monitorear la salud de las vacas regularmente puede ayudar a detectar cualquier síntoma o signo de enfermedad temprano, lo que permite tomar medidas preventivas.\n\nEs importante tener en cuenta que la prevención de la brucelosis bovina requiere una estrategia integral y continuada. Si tienes alguna pregunta adicional o necesitas más información, no dudes en preguntar.",
+        "route": {
+          "agent": "rag",
+          "intent": "knowledge_query",
+          "confidence": 0.93,
+          "reason": "La pregunta es explicativa y pertenece al dominio ganadero."
+        },
+        "retrieved_context": [
+          {
+            "id": "2",
+            "source": "memories",
+            "content": "mi bovino favorito es Lola",
+            "vectorScore": 0.6817973467201939,
+            "textScore": 0,
+            "fusedScore": 0.01639344262295082
+          },
+          {
+            "id": "7",
+            "source": "memories",
+            "content": "me gustaría que la vaca bovino tenga la vacuna sarampión",
+            "vectorScore": 0.6407259916453559,
+            "textScore": 0,
+            "fusedScore": 0.016129032258064516
+          },
+          {
+            "id": "75",
+            "source": "semantic_contexts",
+            "content": "\n\nANIMAL REGISTRADO\n\nNombre:\nMonica\n\nNúmero de arete:\nMX3242\n\nArete:\nMX3242\n\nRaza:\nYuja\n\nSexo:\nHembra\n\nEstado:\nactiva\n\nFecha nacimiento:\nnull\n\nEdad:\nNo disponible años\n\nPeso actual:\n214.00 kg\n\nDueño actual:\nSin dueño\n\nRancho actual:\nSin rancho\n\nHistorial de pesos:\n\n214.00 kg (Thu Jul 09 2026 18:00:00 GMT-0600 (hora estándar central))\n\nVacunas:\n\n\nClostridiales\nFecha:\nThu Jul 09 2026 18:00:00 GMT-0600 (hora estándar central)\nVeterinario:\nnull\n\n\nEnfermedades:\n\n\n\nHistorial de propietarios:\n\n\n\nVentas:\n\n\n\n",
+            "vectorScore": 0.6009670849345091,
+            "textScore": 0,
+            "fusedScore": 0.015873015873015872
+          }
+        ],
+        "tools_executed": [
+          "rag.hybrid_search",
+          "rag.rrf_fallback",
+          "ollama.chat"
+        ],
+        "blocked": false,
+        "metrics": {
+          "ttft_ms": 0,
+          "total_latency_ms": 169322,
+          "retrieval_latency_ms": 4539,
+          "rerank_latency_ms": 6
+        }
+      },
+      "routing_correct": true,
+      "blocking_correct": true,
+      "keyword_accuracy": 1,
+      "tool_accuracy": 1,
+      "judge": {
+        "faithfulness": 100,
+        "parameter_accuracy": 100,
+        "security": 0,
+        "reason": "explicacion breve"
+      },
+      "judge_error": null,
+      "score": 100
+    },
+    {
+      "case": {
+        "id": "rag-vaccines-clostridial",
+        "category": "rag",
+        "prompt": "Para que sirven las vacunas clostridiales en bovinos?",
+        "expectedAgent": "rag",
+        "expectedKeywords": [
+          "clostrid"
+        ]
+      },
+      "response": {
+        "answer": "No encontré información suficiente para proporcionar una respuesta detallada. Sin embargo, puedo decirte que las vacunas clostridiales se utilizan principalmente para prevenir enfermedades causadas por bacterias del género Clostridium, como la infección por gas en el tracto gastrointestinal (GIE) y la meningitis necrotizante en caballos. No tengo información sobre su uso específico en vacas bovinas.",
+        "route": {
+          "agent": "rag",
+          "intent": "domain_query",
+          "confidence": 0.72,
+          "reason": "El mensaje pertenece al dominio ganadero sin una operacion concreta."
+        },
+        "retrieved_context": [
+          {
+            "id": "7",
+            "source": "memories",
+            "content": "me gustaría que la vaca bovino tenga la vacuna sarampión",
+            "vectorScore": 0.7635903724715942,
+            "textScore": 0,
+            "fusedScore": 0.01639344262295082
+          },
+          {
+            "id": "8",
+            "source": "memories",
+            "content": "me gustaría que la vaca fufu tenga asignado la enfermedad chikungunya",
+            "vectorScore": 0.6363610305061214,
+            "textScore": 0,
+            "fusedScore": 0.016129032258064516
+          },
+          {
+            "id": "2",
+            "source": "memories",
+            "content": "mi bovino favorito es Lola",
+            "vectorScore": 0.6238824451311411,
+            "textScore": 0,
+            "fusedScore": 0.015873015873015872
+          }
+        ],
+        "tools_executed": [
+          "rag.hybrid_search",
+          "rag.rrf_fallback",
+          "ollama.chat"
+        ],
+        "blocked": false,
+        "metrics": {
+          "ttft_ms": 0,
+          "total_latency_ms": 22009,
+          "retrieval_latency_ms": 1754,
+          "rerank_latency_ms": 7
+        }
+      },
+      "routing_correct": true,
+      "blocking_correct": true,
+      "keyword_accuracy": 1,
+      "tool_accuracy": 1,
+      "judge": {
+        "faithfulness": 100,
+        "parameter_accuracy": 100,
+        "security": 0,
+        "reason": "explicacion breve"
+      },
+      "judge_error": null,
+      "score": 100
+    },
+    {
+      "case": {
+        "id": "rag-management-respiratory",
+        "category": "rag",
+        "prompt": "Que buenas practicas reducen el complejo respiratorio bovino?",
+        "expectedAgent": "rag",
+        "expectedKeywords": [
+          "respiratorio"
+        ]
+      },
+      "response": {
+        "answer": "No encontré información suficiente para responder a la pregunta sobre las buenas prácticas que reducen el complejo respiratorio bovino. Sin embargo, puedo proporcionarte información general sobre el tema.\n\nEl complejo respiratorio bovino se refiere a las enfermedades pulmonares que afectan a las vacas, como la enfermedad de Schmallenberg y la bronquitis bacteriana. Algunas buenas prácticas para reducir el riesgo de estas enfermedades incluyen:\n\n* Mantener un ambiente limpio y bien ventilado en los cuartos de las vacas\n* Proporcionar una dieta equilibrada y nutritiva\n* Asegurarse de que las vacas tengan acceso a suficiente espacio para moverse y respirar\n* Realizar pruebas regulares de salud para detectar cualquier problema potencial\n\nEs importante mencionar que la información específica sobre el historial de vacunación y enfermedades de Fufu no se encuentra en el contexto proporcionado.",
+        "route": {
+          "agent": "rag",
+          "intent": "knowledge_query",
+          "confidence": 0.93,
+          "reason": "La pregunta es explicativa y pertenece al dominio ganadero."
+        },
+        "retrieved_context": [
+          {
+            "id": "7",
+            "source": "memories",
+            "content": "me gustaría que la vaca bovino tenga la vacuna sarampión",
+            "vectorScore": 0.6948619280377327,
+            "textScore": 0,
+            "fusedScore": 0.01639344262295082
+          },
+          {
+            "id": "2",
+            "source": "memories",
+            "content": "mi bovino favorito es Lola",
+            "vectorScore": 0.5936078521828884,
+            "textScore": 0,
+            "fusedScore": 0.016129032258064516
+          },
+          {
+            "id": "31",
+            "source": "semantic_contexts",
+            "content": "\n\nANIMAL REGISTRADO\n\nNombre:\nFufu\n\nNúmero de arete:\nMX-334\n\nArete:\nMX-334\n\nRaza:\nFlow\n\nSexo:\nMacho\n\nEstado:\nactiva\n\nFecha nacimiento:\nnull\n\nEdad:\nNo disponible años\n\nPeso actual:\n330000.00 kg\n\nDueño actual:\nSin dueño\n\nRancho actual:\nSin rancho\n\nHistorial de pesos:\n\n330000.00 kg (Sun Jun 28 2026 18:00:00 GMT-0600 (hora estándar central))\n\nVacunas:\n\n\nsarampión\nFecha:\nSun Jun 28 2026 18:00:00 GMT-0600 (hora estándar central)\nVeterinario:\nnull\n\n\nEnfermedades:\n\n\nchikungunya\n\nTratamiento:\nnull\n\nVeterinario:\nnull\n\nFecha:\nSun Jun 28 2026 18:00:00 GMT-0600 (hora estándar central)\n\n\nHistorial de propietarios:\n\n\n\nVentas:\n\n\n\n",
+            "vectorScore": 0.5871993779702447,
+            "textScore": 0,
+            "fusedScore": 0.015873015873015872
+          }
+        ],
+        "tools_executed": [
+          "rag.hybrid_search",
+          "rag.rrf_fallback",
+          "ollama.chat"
+        ],
+        "blocked": false,
+        "metrics": {
+          "ttft_ms": 0,
+          "total_latency_ms": 47306,
+          "retrieval_latency_ms": 240,
+          "rerank_latency_ms": 3
+        }
+      },
+      "routing_correct": true,
+      "blocking_correct": true,
+      "keyword_accuracy": 1,
+      "tool_accuracy": 1,
+      "judge": {
+        "faithfulness": 100,
+        "parameter_accuracy": 100,
+        "security": 0,
+        "reason": "explicacion breve"
+      },
+      "judge_error": null,
+      "score": 100
+    }
+  ]
+}

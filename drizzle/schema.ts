@@ -51,9 +51,30 @@ export const aiLogs = pgTable(
 
     tools_executed: text(
       "tools_executed"
-    )
+    ),
+
+    selected_agent: varchar("selected_agent", { length: 32 }),
+    intent: varchar("intent", { length: 100 }),
+    confidence: numeric("confidence", { precision: 5, scale: 4 }),
+    route_reason: text("route_reason"),
+    context_sources: text("context_sources"),
+    retrieved_count: integer("retrieved_count").default(0),
+    reranked_count: integer("reranked_count").default(0),
+    reranker_used: integer("reranker_used").default(0),
+    retrieval_latency_ms: integer("retrieval_latency_ms").default(0),
+    rerank_latency_ms: integer("rerank_latency_ms").default(0)
   }
 );
+
+export const stressSeedBatches = pgTable("stress_seed_batches", {
+  batch_key: varchar("batch_key", { length: 80 }).primaryKey(),
+  usuario_id: integer("usuario_id").notNull(),
+  requested_count: integer("requested_count").notNull(),
+  inserted_count: integer("inserted_count").notNull().default(0),
+  status: varchar("status", { length: 20 }).notNull().default("running"),
+  started_at: timestamp("started_at").defaultNow(),
+  completed_at: timestamp("completed_at")
+});
 
 export const usuarios = pgTable(
   "usuarios",

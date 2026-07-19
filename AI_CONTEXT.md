@@ -8,6 +8,8 @@ El proyecto esta construido como una aplicacion Nuxt: frontend y backend viven e
 
 La IA funciona con Ollama local. Usa un router principal que combina reglas, consultas SQL directas, guardrails, memoria de usuario, function calling con herramientas internas y fallback RAG sobre contexto semantico almacenado en PostgreSQL con pgvector.
 
+Desde Semana 7, el endpoint principal delega en una arquitectura multiagente incremental: un router determinista clasifica cada turno como `direct`, `transactional` o `rag`; el agente transaccional reutiliza las tools existentes y el agente RAG usa busqueda hibrida, RRF y reranking local con fallback.
+
 El flujo actual incluye una capa determinista previa al LLM para clasificar intenciones frecuentes, extraer parametros, detectar datos faltantes, mantener acciones pendientes por conversacion y pedir confirmacion antes de cualquier escritura. La autenticacion usa una cookie de sesion firmada y HttpOnly; los endpoints obtienen `usuario_id` exclusivamente de esa sesion.
 
 ## Stack tecnologico
@@ -95,6 +97,15 @@ app/
     observabilidad/          Logs de IA
     ventas/                  CRUD de ventas
 
+  server/ai/
+    agents/routerAgent.ts          Seleccion determinista de agente
+    agents/transactionalAgent.ts   Acceso autorizado a tools existentes
+    agents/ragAgent.ts             Respuesta de solo lectura basada en contexto
+    context/agentContext.ts        Contexto corto y tipado entre agentes
+    rag/hybridSearch.ts            Vector + FTS + RRF
+    rag/rerankerClient.ts          Cliente del reranker local con timeout
+    rag/advancedRagPipeline.ts     Top-10, reranking y Top-3 final
+
   server/utils/
     session.ts               Sesion firmada y hash de contrasenas
     api.ts                   Normalizacion y errores seguros
@@ -165,6 +176,8 @@ app/
 12. En `/ia`, el frontend crea o recupera una conversacion y manda preguntas a `/api/ia/router`.
 
 13. El router de IA:
+    - Clasifica el turno como directo, transaccional o RAG mediante reglas deterministas.
+    - Transfiere solo los ultimos mensajes y las entidades relevantes.
     - Guarda mensajes de conversacion.
     - Aplica guardrails.
     - Responde saludos o ayuda sin LLM cuando aplica.
@@ -179,6 +192,8 @@ app/
     - Intenta function calling con herramientas internas.
     - Consulta datos especificos si detecta un bovino.
     - Usa RAG con memorias y contexto ganadero como fallback.
+    - En RAG combina similitud vectorial y Full Text Search mediante RRF.
+    - Intenta reranking local y usa los Top-3 de RRF si el servicio no esta disponible.
     - Registra metricas en `ai_logs`.
 
 14. El chat usa streaming tipo SSE para pintar tokens y estados en tiempo real.
@@ -292,7 +307,16 @@ npm run postinstall
 - Las acciones incompletas no deben llamar al LLM ni a la base de datos: deben crear una accion pendiente y pedir solo los campos faltantes.
 - Las acciones sensibles, como eliminar o transferir propiedad, requieren confirmacion antes de ejecutarse.
 - El estado pendiente se guarda en memoria del servidor; si se reinicia Nuxt, se pierde.
+- Las confirmaciones y consultas de memoria deben hablarle al usuario en segunda persona: `soy` se confirma como `eres`, `me llamo` como `te llamas`, `mi` como `tu`.
 - El modelo no debe inventar informacion: el prompt del RAG exige usar memorias, contexto ganadero e historial.
+- Los agentes no se llaman entre si ni vuelven a invocar al router; el orquestador es el unico punto de seleccion.
+- El agente transaccional no recibe documentos RAG y solo puede usar la lista de tools autorizadas.
+- El agente RAG es de solo lectura y entrega como maximo tres contextos al modelo.
+- La busqueda hibrida recupera Top-10 vectoriales/textuales, fusiona con RRF constante 60 y luego rerankea Top-3.
+- Si `RERANKER_URL` no responde, la consulta continua con Top-3 por RRF y registra el fallback.
+- El seeder de estres usa operaciones set-based dentro de una transaccion y lotes idempotentes en `stress_seed_batches`.
+- Los contextos del seeder no tienen embedding por defecto; `--real-embeddings=N` genera solo un subconjunto real y declarado.
+- La evaluacion usa `/api/ia/evaluate`, un juez Ollama local y genera JSON, Markdown y PDF con resultados reales.
 - Un bovino esta listo para venta solo si su ultimo peso registrado es de al menos 550 kg y tiene aplicadas Brucelosis, Clostridiales, Complejo Respiratorio y Rabia. La evaluacion usa exclusivamente datos del usuario autenticado.
 
 ## Pendientes o riesgos detectados
@@ -312,3 +336,5 @@ npm run postinstall
 - El planner cubre las intenciones principales, pero operaciones menos usadas pueden seguir cayendo al function calling legacy.
 - La secuencia automatica de aretes ya evita reutilizar consecutivos por usuario; aun falta automatizar una prueba de concurrencia de base de datos en CI.
 - Varias tools legacy aun crean su propio cliente PostgreSQL con credenciales locales; los endpoints principales ya usan `DATABASE_URL`, pero falta terminar esa unificacion.
+- El modelo `BAAI/bge-reranker-v2-m3` es pesado; el servicio es opcional y se activa con el perfil Compose `reranker`.
+- No existen metricas oficiales de Semana 7 hasta ejecutar `npm run evaluate:agent` en el entorno de entrega.

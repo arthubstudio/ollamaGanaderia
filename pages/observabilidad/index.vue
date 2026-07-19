@@ -21,6 +21,10 @@ function formatTps(value: unknown) {
   if (!Number.isFinite(num)) return "—";
   return num.toFixed(2);
 }
+
+function yesNo(value: unknown) {
+  return Number(value) === 1 || value === true ? "Si" : "No";
+}
 </script>
 
 <template>
@@ -33,18 +37,21 @@ function formatTps(value: unknown) {
     </p>
 
     <div class="bg-white rounded-3xl border border-gray-100 overflow-x-auto">
-      <table class="w-full min-w-[1200px]">
+      <table class="w-full min-w-[1600px]">
         <thead class="bg-gray-50">
           <tr>
             <th class="p-4 text-left">ID</th>
             <th class="p-4 text-left">Sesión</th>
             <th class="p-4 text-left">Prompt</th>
             <th class="p-4 text-left">Respuesta</th>
+            <th class="p-4 text-left">Agente</th>
+            <th class="p-4 text-left">Intencion</th>
             <th class="p-4 text-left">Bloqueado</th>
             <th class="p-4 text-left">TTFT</th>
             <th class="p-4 text-left">Latencia</th>
             <th class="p-4 text-left">TPS</th>
             <th class="p-4 text-left">Herramientas</th>
+            <th class="p-4 text-left">RAG</th>
             <th class="p-4 text-left">Fecha</th>
           </tr>
         </thead>
@@ -64,6 +71,15 @@ function formatTps(value: unknown) {
             </td>
             <td class="p-4 max-w-[180px]">
               <span class="line-clamp-2">{{ log.system_response }}</span>
+            </td>
+            <td class="p-4 font-semibold capitalize">
+              {{ log.selected_agent || "direct" }}
+            </td>
+            <td class="p-4 text-sm max-w-[150px]">
+              <div>{{ log.intent || "-" }}</div>
+              <div class="text-xs text-gray-500">
+                Confianza: {{ log.confidence != null ? Number(log.confidence).toFixed(2) : "-" }}
+              </div>
             </td>
             <td class="p-4">
               <span
@@ -102,6 +118,13 @@ function formatTps(value: unknown) {
                 </span>
               </div>
               <span v-if="!parseTools(log.tools_executed).length">—</span>
+            </td>
+            <td class="p-4 text-xs whitespace-nowrap">
+              <div>Recuperados: {{ log.retrieved_count ?? 0 }}</div>
+              <div>Rerankeados: {{ log.reranked_count ?? 0 }}</div>
+              <div>Reranker: {{ yesNo(log.reranker_used) }}</div>
+              <div>Busqueda: {{ log.retrieval_latency_ms ?? 0 }} ms</div>
+              <div>Rerank: {{ log.rerank_latency_ms ?? 0 }} ms</div>
             </td>
             <td class="p-4 text-sm text-gray-500 whitespace-nowrap">
               {{ log.timestamp }}

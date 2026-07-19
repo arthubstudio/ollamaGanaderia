@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { generarEmbeddingSafe } from "~/lib/embeddings";
+import { memoryConfirmation } from "~/lib/iaMemoryPerspective.js";
 import { requireUserId } from "~/server/utils/session";
 
 const sql = postgres(
@@ -71,25 +72,25 @@ function inferMemoryRecord(
       test: (t) => /^mi vaca favorita es\s+/.test(t),
       slot: () => "vaca_favorita",
       tipo: "preferencia",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^mi rancho favorito es\s+/.test(t),
       slot: () => "rancho_favorito",
       tipo: "preferencia",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^mi proveedor favorito es\s+/.test(t),
       slot: () => "proveedor_favorito",
       tipo: "preferencia",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^mi dueño favorito es\s+/.test(t) || /^mi dueno favorito es\s+/.test(t),
       slot: () => "dueno_favorito",
       tipo: "preferencia",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^mi ([a-z0-9 _-]+?) favorito(?:a)? es\s+/.test(t),
@@ -104,7 +105,7 @@ function inferMemoryRecord(
         return `${subjectSlug}_favorito`;
       },
       tipo: "preferencia",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^mi ([a-z0-9 _-]+?) es\s+/.test(t),
@@ -113,43 +114,43 @@ function inferMemoryRecord(
         return slug(m?.[1] ?? "hecho");
       },
       tipo: "hecho",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^(me gusta(?:n)?|amo|adoro)\s+/.test(t),
       slot: () => "me_gusta",
       tipo: "gusto",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^(no me gusta|odio|detesto)\s+/.test(t),
       slot: () => "no_me_gusta",
       tipo: "disgusto",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^prefiero\s+/.test(t),
       slot: () => "preferencia",
       tipo: "preferencia",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^(soy|me llamo)\s+/.test(t),
       slot: () => "identidad",
       tipo: "identidad",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^vivo en\s+/.test(t),
       slot: () => "vivo_en",
       tipo: "ubicacion",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^trabajo en\s+/.test(t),
       slot: () => "trabajo_en",
       tipo: "ocupacion",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     },
     {
       test: (t) => /^(.+?)\s+odia\s+a\s+(.+)$/.test(t),
@@ -160,7 +161,7 @@ function inferMemoryRecord(
         return `rel_${subject}_odia_${target}`;
       },
       tipo: "relacion",
-      respuesta: (t) => `Entendido, recordaré que ${t}.`
+      respuesta: (t) => memoryConfirmation(t)
     }
   ];
 
@@ -192,7 +193,7 @@ function inferMemoryRecord(
       slot: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       tipo: "general",
       contenido: cleaned,
-      respuesta: `Entendido, recordaré: ${cleaned}.`
+      respuesta: memoryConfirmation(cleaned)
     };
   }
 
@@ -200,7 +201,7 @@ function inferMemoryRecord(
     slot: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     tipo: tipoFromForced || "general",
     contenido: raw,
-    respuesta: `Entendido, recordaré: ${raw}.`
+    respuesta: memoryConfirmation(raw)
   };
 }
 

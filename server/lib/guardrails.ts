@@ -24,7 +24,20 @@ const blockedPatterns = [
   "do anything now",
   "bypass restrictions",
   "modo sin restricciones",
-  "sin restricciones"
+  "sin restricciones",
+  "datos de otros usuarios",
+  "muestra otros usuarios",
+  "mostrar otros usuarios",
+  "ejecuta sql",
+  "ejecutar sql",
+  "consulta sql arbitraria",
+  "select * from",
+  "drop table",
+  "alter table",
+  "cambia la contrasena del administrador",
+  "cambiar la contrasena del administrador",
+  "cambia la contraseña del administrador",
+  "cambiar la contraseña del administrador"
 ];
 
 function hasRepetitivePattern(text: string): boolean {

@@ -4,6 +4,8 @@
 
 Ganaderia_AI es una aplicacion web fullstack para gestion de ganado bovino con asistencia de IA local. Permite administrar bovinos, duenos, ranchos, vacunas, vacunas aplicadas, pesos, enfermedades, historial de propiedad, ventas, conversaciones, memorias y observabilidad de interacciones con IA.
 
+La fase de plataforma agrega transferencias de bovinos entre cuentas, catalogo global de razas, notificaciones en tiempo real, contactos y mensajeria privada. Estos dominios reutilizan la sesion firmada, PostgreSQL y las tools transaccionales existentes.
+
 El proyecto esta construido como una aplicacion Nuxt: frontend y backend viven en el mismo repositorio. Las paginas Vue consumen endpoints Nitro ubicados en `server/api`, y esos endpoints consultan PostgreSQL usando una mezcla de Drizzle ORM y SQL directo con `postgres`.
 
 La IA funciona con Ollama local. Usa un router principal que combina reglas, consultas SQL directas, guardrails, memoria de usuario, function calling con herramientas internas y fallback RAG sobre contexto semantico almacenado en PostgreSQL con pgvector.
@@ -113,6 +115,12 @@ app/
 
   server/services/
     ownershipTransfer.ts     Transferencias transaccionales
+    accountTransfer.ts       Solicitudes y aceptacion entre cuentas
+    breedService.ts          Catalogo global de razas
+    community.ts             Amistades, conversaciones y mensajes
+    notifications.ts         Bandeja y estado de lectura
+    userDirectory.ts         Busqueda priorizada de usuarios
+    activityAudit.ts         Auditoria operativa
 
   lib/                       Logica compartida
     db.ts                    Conexion Drizzle/PostgreSQL
@@ -218,6 +226,13 @@ Tablas principales:
 - `conversation_messages`: mensajes de conversaciones.
 - `ai_logs`: observabilidad de prompts, respuestas, latencia, bloqueos y tools.
 - `requisitos_venta`: requisitos sanitarios para venta.
+- `breeds`: catalogo global y razas personalizadas.
+- `bovino_transfers`: solicitudes entre cuentas y estado permanente.
+- `bovino_transfer_events`: bitacora inmutable de cada transferencia.
+- `notifications` y `notification_reads`: notificaciones y lecturas por usuario.
+- `friend_requests` y `friendships`: solicitudes y contactos confirmados.
+- `community_conversations`, `community_conversation_members` y `community_messages`: chat privado separado de las conversaciones IA.
+- `activity_audit_logs`: acciones operativas, permisos, duracion y errores controlados.
 
 Notas importantes:
 
@@ -280,6 +295,8 @@ npm run test
 npm run generate
 npm run preview
 npm run postinstall
+npm run db:migrate:platform
+npm run test:e2e:platform
 ```
 
 ## Convenciones importantes
@@ -318,6 +335,16 @@ npm run postinstall
 - Los contextos del seeder no tienen embedding por defecto; `--real-embeddings=N` genera solo un subconjunto real y declarado.
 - La evaluacion usa `/api/ia/evaluate`, un juez Ollama local y genera JSON, Markdown y PDF con resultados reales.
 - Un bovino esta listo para venta solo si su ultimo peso registrado es de al menos 550 kg y tiene aplicadas Brucelosis, Clostridiales, Complejo Respiratorio y Rabia. La evaluacion usa exclusivamente datos del usuario autenticado.
+- Las transferencias entre cuentas se crean como `PENDING`; el remitente conserva la propiedad hasta que el receptor acepte.
+- Solo el receptor puede aceptar o rechazar; solo el remitente puede cancelar. Los estados finales son `ACCEPTED`, `REJECTED`, `CANCELLED` o `EXPIRED`.
+- La aceptacion bloquea la transferencia y el bovino dentro de una sola transaccion. Las relaciones por `bovino_id` no se copian ni eliminan, por lo que conservan su identidad e historial.
+- Si el arete colisiona en la cuenta receptora, se genera otro mediante `bovino_arete_sequences` y el cambio queda auditado.
+- `bovinos.raza` se conserva por compatibilidad, pero altas y ediciones tambien requieren `breed_id` del catalogo.
+- Las razas globales pueden ser administradas por usuarios con rol `admin`; una raza personalizada tambien puede editarla su creador.
+- La busqueda de usuarios prioriza correo exacto, nombre exacto, nombre parcial y similitud con `pg_trgm`.
+- El chat comunitario solo se habilita entre contactos confirmados. Sus tablas no se mezclan con `conversations` de IA.
+- Notificaciones y mensajes usan SSE con sondeo corto de PostgreSQL; no requieren un servicio Docker adicional.
+- Las nuevas tools comparten servicios con la interfaz y nunca toman `usuario_id` del texto ni del body.
 
 ## Pendientes o riesgos detectados
 
@@ -338,3 +365,7 @@ npm run postinstall
 - Varias tools legacy aun crean su propio cliente PostgreSQL con credenciales locales; los endpoints principales ya usan `DATABASE_URL`, pero falta terminar esa unificacion.
 - El modelo `BAAI/bge-reranker-v2-m3` es pesado; el servicio es opcional y se activa con el perfil Compose `reranker`.
 - No existen metricas oficiales de Semana 7 hasta ejecutar `npm run evaluate:agent` en el entorno de entrega.
+- El catalogo inicial incluye 50 razas principales, no un censo mundial exhaustivo de 800-900 razas.
+- El SSE actual consulta PostgreSQL cada dos segundos por conexion. Para una instalacion con muchas instancias conviene incorporar PostgreSQL `LISTEN/NOTIFY` o un bus local, sin cambiar la API publica.
+- Los archivos y fotografias no tienen tablas propias en el esquema actual. Cualquier tabla futura relacionada mediante `bovino_id` permanecera con el bovino durante la transferencia.
+- Las acciones pendientes de IA siguen en memoria; una seleccion de destinatario o confirmacion se pierde si el proceso Nuxt se reinicia.

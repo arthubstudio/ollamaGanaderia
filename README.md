@@ -286,3 +286,43 @@ npm run test:e2e
 - El reranker BGE requiere RAM, almacenamiento y una descarga inicial considerable.
 - El estado conversacional pendiente vive en memoria y no se comparte entre multiples instancias.
 - Las metricas de Semana 7 solo deben citarse despues de ejecutar el seeder y el evaluador en el equipo de entrega.
+
+## Plataforma de transferencias y comunidad
+
+La migracion aditiva de esta fase se aplica en bases existentes con:
+
+```bash
+npm run db:migrate:platform
+```
+
+En bases nuevas, Docker Compose monta la migracion despues de `database/seeds.sql` y la ejecuta automaticamente. No elimina tablas ni registros.
+
+Funcionalidades disponibles:
+
+- `/transferencias`: solicitudes entre cuentas, bandejas enviadas/recibidas, aceptar, rechazar y cancelar.
+- `/notificaciones`: actividad inmediata mediante SSE y estado leido.
+- `/razas`: catalogo global, busqueda, filtros, alta, edicion y activacion.
+- `/amigos`: busqueda de usuarios y solicitudes de contacto.
+- `/mensajes`: chat privado entre contactos mediante SSE.
+- `/bovinos/:id/historial`: bitacora permanente de transferencias del bovino.
+- `/observabilidad`: logs IA y auditoria operativa.
+
+La aceptacion de una transferencia se ejecuta dentro de una transaccion con bloqueo de filas. Cambia `bovinos.usuario_id` y mantiene pesos, enfermedades, historial, contextos y cualquier relacion ligada por `bovino_id`. Las vacunas aplicadas se enlazan al catalogo equivalente del receptor y las memorias que tengan `bovino_id` cambian de cuenta.
+
+Si el arete ya existe en la cuenta receptora, se genera el siguiente arete atomico de esa cuenta y ambos valores quedan registrados en el historial de transferencia.
+
+### Pruebas de plataforma
+
+```bash
+npm run test
+npm run test:e2e:platform -- --project=chromium
+npm run build
+```
+
+La prueba E2E crea dos cuentas unicas, registra raza, bovino y peso, transfiere el bovino, comprueba aislamiento de permisos, crea una amistad, envia un mensaje, revisa notificaciones, consulta el catalogo mediante IA y abre las paginas nuevas.
+
+Documentacion detallada:
+
+```text
+docs/plataforma-transferencias-comunidad.md
+```

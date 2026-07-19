@@ -29,8 +29,139 @@ import { quitarPropiedad } from "./tools/quitarPropiedad";
 import { inferActionFromQuestion } from "~/lib/iaWriteActionRouter";
 import { needsBovinoAssignment } from "~/lib/iaIntentRouter";
 import { requireUserId } from "~/server/utils/session";
+import {
+  aceptarSolicitudAmistad,
+  aceptarTransferencia,
+  buscarRaza,
+  buscarUsuario,
+  cancelarTransferencia,
+  crearRaza,
+  crearSolicitudTransferencia,
+  enviarMensaje,
+  enviarSolicitudAmistad,
+  leerConversacion,
+  listarBovinosEnviados,
+  listarBovinosRecibidos,
+  listarConversaciones,
+  listarRazas,
+  listarTransferencias,
+  rechazarSolicitudAmistad,
+  rechazarTransferencia
+} from "./tools/platformTools";
 
 type AnyObject = Record<string, any>;
+
+const PLATFORM_TOOL_SCHEMAS = [
+  {
+    type: "function",
+    function: {
+      name: "buscarUsuario",
+      description: "Busca usuarios por correo, nombre exacto, nombre parcial y similitud.",
+      parameters: { type: "object", properties: { busqueda: { type: "string" } }, required: ["busqueda"] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "crearSolicitudTransferencia",
+      description: "Solicita transferir un bovino a otra cuenta. No cambia la propiedad hasta que el receptor acepte.",
+      parameters: {
+        type: "object",
+        properties: {
+          nombre_bovino: { type: "string" },
+          usuario_destino: { type: "string", description: "Nombre o correo del usuario destino" },
+          destination_rancho_id: { type: "number" },
+          mensaje: { type: "string" }
+        },
+        required: ["nombre_bovino", "usuario_destino"]
+      }
+    }
+  },
+  ...["aceptarTransferencia", "rechazarTransferencia", "cancelarTransferencia"].map((name) => ({
+    type: "function" as const,
+    function: {
+      name,
+      description: `${name} de bovino por ID.`,
+      parameters: { type: "object", properties: { transferencia_id: { type: "number" }, rancho_destino_id: { type: "number" } }, required: ["transferencia_id"] }
+    }
+  })),
+  ...["listarTransferencias", "listarBovinosRecibidos", "listarBovinosEnviados"].map((name) => ({
+    type: "function" as const,
+    function: {
+      name,
+      description: `${name} de la cuenta autenticada.`,
+      parameters: { type: "object", properties: { direccion: { type: "string" }, estado: { type: "string" } } }
+    }
+  })),
+  {
+    type: "function",
+    function: {
+      name: "buscarRaza",
+      description: "Busca una raza exacta en el catalogo global.",
+      parameters: { type: "object", properties: { nombre: { type: "string" } }, required: ["nombre"] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "crearRaza",
+      description: "Crea una raza nueva solo despues de que el usuario lo confirme.",
+      parameters: {
+        type: "object",
+        properties: { nombre: { type: "string" }, tipo: { type: "string" }, pais_origen: { type: "string" }, descripcion: { type: "string" } },
+        required: ["nombre"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "listarRazas",
+      description: "Lista como maximo diez razas y comunica que el catalogo completo esta en el menu.",
+      parameters: { type: "object", properties: { busqueda: { type: "string" }, tipo: { type: "string" }, limite: { type: "number" } } }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "enviarSolicitudAmistad",
+      description: "Envia una solicitud de contacto a otro usuario.",
+      parameters: { type: "object", properties: { usuario_destino: { type: "string" }, mensaje: { type: "string" } }, required: ["usuario_destino"] }
+    }
+  },
+  ...["aceptarSolicitudAmistad", "rechazarSolicitudAmistad"].map((name) => ({
+    type: "function" as const,
+    function: {
+      name,
+      description: `${name} por ID.`,
+      parameters: { type: "object", properties: { solicitud_id: { type: "number" } }, required: ["solicitud_id"] }
+    }
+  })),
+  {
+    type: "function",
+    function: {
+      name: "enviarMensaje",
+      description: "Envia un mensaje a un contacto existente.",
+      parameters: { type: "object", properties: { usuario_destino: { type: "string" }, mensaje: { type: "string" } }, required: ["usuario_destino", "mensaje"] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "leerConversacion",
+      description: "Lee la conversacion con un contacto.",
+      parameters: { type: "object", properties: { usuario_destino: { type: "string" } }, required: ["usuario_destino"] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "listarConversaciones",
+      description: "Lista conversaciones, contactos y solicitudes de amistad.",
+      parameters: { type: "object", properties: {} }
+    }
+  }
+] as const;
 
 function safeJsonParse(value: unknown): AnyObject {
   if (!value) return {};
@@ -437,6 +568,99 @@ Estado: ${resultado.estado ?? "N/D"}`.trim();
       return `Se quitó ${partes.join(" y ")} de ${resultado.bovino.nombre}.`;
     }
 
+    case "buscarUsuario": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude buscar usuarios.";
+      if (!resultado.matches?.length) return "No encontre usuarios relacionados.";
+      return `Usuarios encontrados:\n${resultado.matches.map((item: any) => `- ${item.nombre} (${item.email})`).join("\n")}`;
+    }
+
+    case "crearSolicitudTransferencia": {
+      if (!resultado?.ok) {
+        const matches = resultado?.matches ?? [];
+        if (resultado?.reason === "ambiguous" && matches.length) {
+          return `Encontre ${matches.length} usuarios relacionados:\n${matches.map((item: any) => `- ${item.nombre} (${item.email})`).join("\n")}\nIndica el correo electronico del usuario correcto.`;
+        }
+        return resultado?.error ?? "No pude crear la solicitud de transferencia.";
+      }
+      return `La transferencia de ${resultado.transfer.bovino.nombre} fue enviada a ${resultado.transfer.destination.nombre} (${resultado.transfer.destination.email}). El bovino seguira en tu cuenta hasta que sea aceptada.`;
+    }
+
+    case "aceptarTransferencia":
+      if (!resultado?.ok) return resultado?.error ?? "No pude aceptar la transferencia.";
+      return `Transferencia aceptada. ${resultado.bovino.nombre} ahora esta en tu cuenta con el arete ${resultado.bovino.numero_arete}.`;
+
+    case "rechazarTransferencia":
+      return resultado?.ok ? "Transferencia rechazada. La propiedad no cambio." : resultado?.error;
+
+    case "cancelarTransferencia":
+      return resultado?.ok ? "Transferencia cancelada. La propiedad no cambio." : resultado?.error;
+
+    case "listarTransferencias":
+    case "listarBovinosRecibidos":
+    case "listarBovinosEnviados": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude consultar transferencias.";
+      const items = resultado.transfers ?? [];
+      if (!items.length) return "No hay transferencias con esos filtros.";
+      return items.slice(0, 10).map((item: any) =>
+        `- ${item.bovino_nombre} | ${item.direction === "sent" ? "enviada a" : "recibida de"} ${item.direction === "sent" ? item.destination_user_name : item.source_user_name} | ${item.status}`
+      ).join("\n");
+    }
+
+    case "buscarRaza":
+      return resultado?.breed
+        ? `La raza ${resultado.breed.nombre} esta registrada y activa.`
+        : "Esa raza no existe registrada. Deseas crearla?";
+
+    case "crearRaza":
+      if (!resultado?.ok) return resultado?.error ?? "No pude crear la raza.";
+      return resultado.created
+        ? `La raza ${resultado.breed.nombre} fue creada correctamente.`
+        : `La raza ${resultado.breed.nombre} ya estaba registrada.`;
+
+    case "crearRazaYBovino": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude crear la raza y el bovino.";
+      const v = resultado.bovino;
+      return `${v.nombre} fue registrado correctamente con la raza ${v.raza} y el arete ${v.numero_arete}.`;
+    }
+
+    case "listarRazas": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude consultar las razas.";
+      const items = resultado.breeds ?? [];
+      if (!items.length) return "No encontre razas con esos filtros.";
+      return `Razas disponibles:\n${items.map((item: any) => `- ${item.nombre} (${item.tipo})`).join("\n")}\nPuedes consultar todas las razas desde el menu Catalogo de Razas.`;
+    }
+
+    case "enviarSolicitudAmistad":
+      if (!resultado?.ok) return resultado?.error ?? "No pude enviar la solicitud.";
+      return resultado.autoAccepted
+        ? `La solicitud pendiente de ${resultado.user.nombre} fue aceptada y ahora son contactos.`
+        : `Solicitud de contacto enviada a ${resultado.user.nombre}.`;
+
+    case "aceptarSolicitudAmistad":
+      return resultado?.ok ? "Solicitud aceptada. Ya pueden conversar." : resultado?.error;
+
+    case "rechazarSolicitudAmistad":
+      return resultado?.ok ? "Solicitud de contacto rechazada." : resultado?.error;
+
+    case "enviarMensaje":
+      return resultado?.ok
+        ? `Mensaje enviado a ${resultado.recipient.nombre}.`
+        : resultado?.error ?? "No pude enviar el mensaje.";
+
+    case "leerConversacion": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude leer la conversacion.";
+      const messages = resultado.messages ?? [];
+      if (!messages.length) return `Aun no hay mensajes con ${resultado.recipient.nombre}.`;
+      return messages.slice(-10).map((item: any) => `- ${item.sender_name}: ${item.content}`).join("\n");
+    }
+
+    case "listarConversaciones": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude listar conversaciones.";
+      const items = resultado.conversations ?? [];
+      if (!items.length) return "No tienes conversaciones comunitarias.";
+      return items.slice(0, 10).map((item: any) => `- ${item.contact_name}: ${item.last_message ?? "Sin mensajes"} (${item.unread_count} sin leer)`).join("\n");
+    }
+
     default:
       return typeof resultado === "string" ? resultado : JSON.stringify(resultado, null, 2);
   }
@@ -618,7 +842,8 @@ function buildToolSchemas() {
           required: ["nombre_vaca"]
         }
       }
-    }
+    },
+    ...PLATFORM_TOOL_SCHEMAS
   ] as const;
 }
 
@@ -664,6 +889,7 @@ async function executeToolCall(
         {
           nombre: String(argumentos.nombre ?? ""),
           raza: String(argumentos.raza ?? ""),
+          breed_id: argumentos.breed_id ? Number(argumentos.breed_id) : undefined,
           sexo: String(argumentos.sexo ?? ""),
           fecha_nacimiento: argumentos.fecha_nacimiento
             ? String(argumentos.fecha_nacimiento)
@@ -891,6 +1117,93 @@ async function executeToolCall(
       );
     }
 
+    case "buscarUsuario":
+      return buscarUsuario({ busqueda: String(argumentos.busqueda ?? "") }, usuarioId);
+
+    case "crearSolicitudTransferencia":
+      return crearSolicitudTransferencia({
+        nombre_bovino: String(argumentos.nombre_bovino ?? argumentos.nombre_vaca ?? nombreAnimalContexto ?? ""),
+        usuario_destino: String(argumentos.usuario_destino ?? argumentos.destination_email ?? ""),
+        destination_rancho_id: argumentos.destination_rancho_id ? Number(argumentos.destination_rancho_id) : undefined,
+        mensaje: argumentos.mensaje ? String(argumentos.mensaje) : undefined
+      }, usuarioId);
+
+    case "aceptarTransferencia":
+      return aceptarTransferencia({
+        transferencia_id: Number(argumentos.transferencia_id),
+        rancho_destino_id: argumentos.rancho_destino_id ? Number(argumentos.rancho_destino_id) : undefined
+      }, usuarioId);
+
+    case "rechazarTransferencia":
+      return rechazarTransferencia({ transferencia_id: Number(argumentos.transferencia_id) }, usuarioId);
+
+    case "cancelarTransferencia":
+      return cancelarTransferencia({ transferencia_id: Number(argumentos.transferencia_id) }, usuarioId);
+
+    case "listarTransferencias":
+      return listarTransferencias({ direccion: argumentos.direccion, estado: argumentos.estado }, usuarioId);
+
+    case "listarBovinosRecibidos":
+      return listarBovinosRecibidos({ estado: argumentos.estado }, usuarioId);
+
+    case "listarBovinosEnviados":
+      return listarBovinosEnviados({ estado: argumentos.estado }, usuarioId);
+
+    case "buscarRaza":
+      return buscarRaza({ nombre: String(argumentos.nombre ?? "") }, usuarioId);
+
+    case "crearRaza":
+      return crearRaza({
+        nombre: String(argumentos.nombre ?? ""),
+        tipo: argumentos.tipo ? String(argumentos.tipo) : undefined,
+        pais_origen: argumentos.pais_origen ? String(argumentos.pais_origen) : undefined,
+        descripcion: argumentos.descripcion ? String(argumentos.descripcion) : undefined
+      }, usuarioId);
+
+    case "crearRazaYBovino": {
+      const race = await crearRaza({ nombre: String(argumentos.raza ?? "") }, usuarioId);
+      if (!race.ok) return race;
+      return crearBovino({
+        nombre: String(argumentos.nombre ?? ""),
+        raza: String(race.breed.nombre),
+        breed_id: Number(race.breed.id),
+        sexo: String(argumentos.sexo ?? ""),
+        fecha_nacimiento: argumentos.fecha_nacimiento ? String(argumentos.fecha_nacimiento) : undefined,
+        estado: argumentos.estado ? String(argumentos.estado) : undefined
+      }, usuarioId);
+    }
+
+    case "listarRazas":
+      return listarRazas({
+        busqueda: argumentos.busqueda ? String(argumentos.busqueda) : undefined,
+        tipo: argumentos.tipo ? String(argumentos.tipo) : undefined,
+        limite: argumentos.limite ? Number(argumentos.limite) : 10
+      }, usuarioId);
+
+    case "enviarSolicitudAmistad":
+      return enviarSolicitudAmistad({
+        usuario_destino: String(argumentos.usuario_destino ?? ""),
+        mensaje: argumentos.mensaje ? String(argumentos.mensaje) : undefined
+      }, usuarioId);
+
+    case "aceptarSolicitudAmistad":
+      return aceptarSolicitudAmistad({ solicitud_id: Number(argumentos.solicitud_id) }, usuarioId);
+
+    case "rechazarSolicitudAmistad":
+      return rechazarSolicitudAmistad({ solicitud_id: Number(argumentos.solicitud_id) }, usuarioId);
+
+    case "enviarMensaje":
+      return enviarMensaje({
+        usuario_destino: String(argumentos.usuario_destino ?? ""),
+        mensaje: String(argumentos.mensaje ?? "")
+      }, usuarioId);
+
+    case "leerConversacion":
+      return leerConversacion({ usuario_destino: String(argumentos.usuario_destino ?? "") }, usuarioId);
+
+    case "listarConversaciones":
+      return listarConversaciones({}, usuarioId);
+
     default:
       return null;
   }
@@ -1036,6 +1349,17 @@ ACCIONES CRUD:
 - aplicarVacuna, eliminarVacunaAplicada, eliminarVacuna
 - eliminarDueno, eliminarRancho, quitarPropiedad
 - registrarPeso
+
+TRANSFERENCIAS ENTRE CUENTAS:
+- Si el usuario dice enviar, mandar o transferir un bovino a otro usuario, usa crearSolicitudTransferencia.
+- transferirPropiedad solo cambia dueno o rancho dentro de la misma cuenta.
+- Nunca aceptes, rechaces o canceles una transferencia sin su ID y sin la sesion autorizada.
+
+RAZAS Y COMUNIDAD:
+- Usa buscarRaza y listarRazas para consultar el catalogo global.
+- No inventes razas. crearRaza requiere confirmacion del usuario.
+- Usa enviarSolicitudAmistad antes del chat; enviarMensaje solo funciona entre contactos.
+- Para destinatarios ambiguos, pide el correo exacto y no elijas por tu cuenta.
 
 Reglas para vacunas vs enfermedades vs consultas (MUY IMPORTANTE):
 - PREGUNTA sobre vacunas → getVacunas. ACCIÓN sobre vacunas → aplicarVacuna o crearVacuna.

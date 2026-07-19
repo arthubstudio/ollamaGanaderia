@@ -5,10 +5,30 @@ const usuario = useState<any>("usuario", () => null);
 const navItems = [
   { to: "/", label: "Inicio", icon: "lucide:home" },
   { to: "/bovinos", label: "Bovinos", icon: "mdi:cow" },
+  { to: "/transferencias", label: "Transferencias", icon: "lucide:arrow-left-right" },
   { to: "/vacunas", label: "Vacunas", icon: "lucide:syringe" },
+  { to: "/razas", label: "Catalogo de Razas", icon: "lucide:library" },
+  { to: "/amigos", label: "Contactos", icon: "lucide:users" },
+  { to: "/mensajes", label: "Mensajes", icon: "lucide:messages-square" },
   { to: "/ia", label: "Asistente IA", icon: "lucide:sparkles" },
   { to: "/observabilidad", label: "Observabilidad", icon: "lucide:bar-chart-3" }
 ];
+
+const notificationCount = ref(0);
+let notificationStream: EventSource | null = null;
+
+onMounted(() => {
+  notificationStream = new EventSource("/api/notifications/stream");
+  notificationStream.addEventListener("notifications", (event: MessageEvent) => {
+    try {
+      notificationCount.value = Number(JSON.parse(event.data)?.unread_count ?? 0);
+    } catch {
+      notificationCount.value = 0;
+    }
+  });
+});
+
+onBeforeUnmount(() => notificationStream?.close());
 
 function isActive(path: string) {
   if (path === "/") return route.path === "/";
@@ -46,12 +66,12 @@ async function cerrarSesion() {
         </div>
       </div>
 
-      <nav class="flex-1 p-4 space-y-1">
+      <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
         <NuxtLink
           v-for="item in navItems"
           :key="item.to"
           :to="item.to"
-          class="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all"
+          class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
           :class="isActive(item.to)
             ? 'bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100'
             : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'"
@@ -97,6 +117,17 @@ async function cerrarSesion() {
         </div>
 
         <div class="flex items-center gap-2 sm:gap-4">
+          <NuxtLink
+            to="/notificaciones"
+            class="relative w-10 h-10 rounded-xl border border-stone-200 text-stone-600 flex items-center justify-center hover:bg-stone-50"
+            aria-label="Notificaciones"
+            title="Notificaciones"
+          >
+            <Icon name="lucide:bell" class="size-5" />
+            <span v-if="notificationCount" class="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[11px] font-bold flex items-center justify-center">
+              {{ notificationCount > 99 ? "99+" : notificationCount }}
+            </span>
+          </NuxtLink>
           <NuxtLink
             to="/ia"
             class="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition shadow-sm"

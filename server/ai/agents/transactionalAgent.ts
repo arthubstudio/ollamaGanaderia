@@ -33,7 +33,25 @@ export const AUTHORIZED_TRANSACTIONAL_TOOLS = new Set([
   "crearDueno",
   "eliminarDueno",
   "crearRancho",
-  "eliminarRancho"
+  "eliminarRancho",
+  "buscarUsuario",
+  "crearSolicitudTransferencia",
+  "aceptarTransferencia",
+  "rechazarTransferencia",
+  "cancelarTransferencia",
+  "listarTransferencias",
+  "listarBovinosRecibidos",
+  "listarBovinosEnviados",
+  "buscarRaza",
+  "crearRaza",
+  "crearRazaYBovino",
+  "listarRazas",
+  "enviarSolicitudAmistad",
+  "aceptarSolicitudAmistad",
+  "rechazarSolicitudAmistad",
+  "enviarMensaje",
+  "leerConversacion",
+  "listarConversaciones"
 ]);
 
 export type TransactionalAgentResult = {
@@ -85,4 +103,3 @@ export async function runTransactionalAgent(params: {
 
   return response as TransactionalAgentResult;
 }
-

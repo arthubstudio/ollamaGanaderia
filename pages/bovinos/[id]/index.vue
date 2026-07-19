@@ -208,6 +208,20 @@ ${pregunta.value}
       >
         Transferir propiedad
       </NuxtLink>
+
+      <NuxtLink
+        :to="`/transferencias?bovino=${vaca.id}`"
+        class="bg-emerald-700 text-white px-5 py-3 rounded-2xl"
+      >
+        Transferir a otra cuenta
+      </NuxtLink>
+
+      <NuxtLink
+        :to="`/bovinos/${vaca.id}/historial`"
+        class="bg-white border border-gray-200 px-5 py-3 rounded-2xl"
+      >
+        Historial permanente
+      </NuxtLink>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">

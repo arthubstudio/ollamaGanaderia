@@ -1,83 +1,73 @@
 <script setup lang="ts">
-definePageMeta({
-  middleware: ["auth"]
-});
-
-const usuario = useState<any>("usuario", () => null);
+definePageMeta({ middleware: ["auth"] });
 
 const route = useRoute();
-const vacaId = Number(route.params.id);
-
-const { data: vaca } = await useFetch(`/api/bovinos/${vacaId}`, {
-  query: {
-    usuario_id: usuario.value?.id
-  }
+const bovinoId = Number(route.params.id);
+const { data: bovino } = await useFetch(`/api/bovinos/${bovinoId}`);
+const { data: breedData } = await useFetch("/api/breeds", { query: { active: true, limit: 100 } });
+const breeds = computed(() => breedData.value?.items ?? []);
+const breedSearch = ref("");
+const filteredBreeds = computed(() => {
+  const query = breedSearch.value.toLowerCase().trim();
+  return query ? breeds.value.filter((item: any) => String(item.nombre).toLowerCase().includes(query)) : breeds.value;
 });
 
 const form = reactive({
   numero_arete: "",
   nombre: "",
-  raza: "",
+  breed_id: null as number | null,
   sexo: "",
   fecha_nacimiento: "",
-  estado: "activa",
+  estado: "activa"
 });
 
 watchEffect(() => {
-  if (vaca.value) {
-    form.numero_arete = vaca.value.numero_arete ?? "";
-    form.nombre = vaca.value.nombre ?? "";
-    form.raza = vaca.value.raza ?? "";
-    form.sexo = vaca.value.sexo ?? "";
-    form.fecha_nacimiento = vaca.value.fecha_nacimiento ?? "";
-    form.estado = vaca.value.estado ?? "activa";
-  }
+  if (!bovino.value) return;
+  form.numero_arete = bovino.value.numero_arete ?? "";
+  form.nombre = bovino.value.nombre ?? "";
+  form.breed_id = bovino.value.breed_id ? Number(bovino.value.breed_id) : null;
+  form.sexo = bovino.value.sexo ?? "";
+  form.fecha_nacimiento = bovino.value.fecha_nacimiento ?? "";
+  form.estado = bovino.value.estado ?? "activa";
 });
 
 async function guardar() {
-  if (!usuario.value?.id) {
-    alert("Debes iniciar sesión.");
-    return;
-  }
-
-  await $fetch(`/api/bovinos/${vacaId}`, {
+  const breed = breeds.value.find((item: any) => Number(item.id) === Number(form.breed_id));
+  if (!breed) return alert("Selecciona una raza activa del catalogo.");
+  await $fetch(`/api/bovinos/${bovinoId}`, {
     method: "PUT",
-    body: {
-      ...form,
-      usuario_id: usuario.value.id
-    },
+    body: { ...form, raza: breed.nombre }
   });
-
-  await navigateTo(`/bovinos/${vacaId}`);
+  await navigateTo(`/bovinos/${bovinoId}`);
 }
 </script>
 
 <template>
-  <div v-if="vaca">
+  <div v-if="bovino">
     <h1 class="text-4xl font-bold mb-8">Editar bovino</h1>
-
-    <div class="space-y-4 max-w-xl">
-      <input v-model="form.numero_arete" class="w-full border p-3 rounded-xl" placeholder="Número arete" />
+    <div class="space-y-4 max-w-xl bg-white border border-gray-100 rounded-3xl p-8">
+      <label class="block">
+        <span class="text-sm font-semibold text-gray-700">Arete</span>
+        <input v-model="form.numero_arete" readonly class="mt-2 w-full border p-3 rounded-xl bg-gray-50 text-gray-500" />
+      </label>
       <input v-model="form.nombre" class="w-full border p-3 rounded-xl" placeholder="Nombre" />
-      <input v-model="form.raza" class="w-full border p-3 rounded-xl" placeholder="Raza" />
-
+      <input v-model="breedSearch" class="w-full border p-3 rounded-xl" placeholder="Buscar raza..." />
+      <select v-model="form.breed_id" class="w-full border p-3 rounded-xl">
+        <option :value="null">Selecciona una raza</option>
+        <option v-for="breed in filteredBreeds" :key="breed.id" :value="Number(breed.id)">{{ breed.nombre }}</option>
+      </select>
       <select v-model="form.sexo" class="w-full border p-3 rounded-xl">
         <option value="">Sexo</option>
         <option value="Macho">Macho (toro)</option>
         <option value="Hembra">Hembra (vaca)</option>
       </select>
-
       <input v-model="form.fecha_nacimiento" type="date" class="w-full border p-3 rounded-xl" />
-
       <select v-model="form.estado" class="w-full border p-3 rounded-xl">
-        <option value="activa">activa</option>
-        <option value="vendida">vendida</option>
-        <option value="baja">baja</option>
+        <option value="activa">Activa</option>
+        <option value="vendida">Vendida</option>
+        <option value="baja">Baja</option>
       </select>
-
-      <button @click="guardar" class="bg-black text-white px-6 py-3 rounded-2xl">
-        Guardar cambios
-      </button>
+      <button @click="guardar" class="bg-black text-white px-6 py-3 rounded-2xl">Guardar cambios</button>
     </div>
   </div>
 </template>

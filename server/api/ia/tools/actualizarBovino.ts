@@ -1,8 +1,9 @@
 import { db } from "~/lib/db";
-import { bovinos } from "~/drizzle/schema";
+import { bovinos, breeds } from "~/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 import { findBovinoByNombre } from "./findBovino";
+import { findBreedByName } from "~/server/services/breedService";
 
 export type ActualizarBovinoArgs = {
   nombre: string;
@@ -10,6 +11,7 @@ export type ActualizarBovinoArgs = {
   nuevo_nombre?: string;
   numero_arete?: string;
   raza?: string;
+  breed_id?: number;
   sexo?: string;
   fecha_nacimiento?: string;
   estado?: string;
@@ -56,7 +58,20 @@ export async function actualizarBovino(
   }
 
   if (args.raza?.trim()) {
-    cambios.raza = args.raza.trim();
+    const breedRows = args.breed_id
+      ? await db.select().from(breeds).where(eq(breeds.id, args.breed_id)).limit(1)
+      : [];
+    const breed = breedRows[0] ?? await findBreedByName(args.raza);
+    if (!breed || !breed.activo) {
+      return {
+        ok: false as const,
+        error: `La raza "${args.raza.trim()}" no existe registrada.`,
+        requiresBreedCreation: true as const,
+        requestedBreed: args.raza.trim()
+      };
+    }
+    cambios.raza = breed.nombre;
+    cambios.breed_id = Number(breed.id);
   }
 
   if (args.sexo?.trim()) {

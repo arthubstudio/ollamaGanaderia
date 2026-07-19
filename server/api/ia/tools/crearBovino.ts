@@ -7,8 +7,10 @@ import {
   type DatosBovinoRegistroInput
 } from "~/lib/bovinoValidation";
 import { optionalDate } from "~/server/utils/api";
+import { findBreedByName } from "~/server/services/breedService";
 
 export type CrearBovinoArgs = DatosBovinoRegistroInput & {
+  breed_id?: number;
   fecha_nacimiento?: string;
   estado?: string;
 };
@@ -19,7 +21,20 @@ export async function crearBovino(args: CrearBovinoArgs, usuarioId?: number | nu
     return { ok: false as const, error: mensajeDatosBovinoFaltantes() };
   }
 
-  const validacion = validarDatosBovinoRegistro(args);
+  const breedRows = args.breed_id
+    ? await sql`SELECT * FROM breeds WHERE id = ${args.breed_id} AND activo = TRUE LIMIT 1`
+    : [];
+  const breed = breedRows[0] ?? await findBreedByName(args.raza);
+  if (!breed) {
+    return {
+      ok: false as const,
+      error: `La raza "${args.raza.trim()}" no existe registrada. Deseas crearla?`,
+      requiresBreedCreation: true as const,
+      requestedBreed: args.raza.trim()
+    };
+  }
+
+  const validacion = validarDatosBovinoRegistro({ ...args, raza: String(breed.nombre) });
   if (!validacion.ok) return { ok: false as const, error: validacion.error };
 
   const existente = await sql`
@@ -42,10 +57,10 @@ export async function crearBovino(args: CrearBovinoArgs, usuarioId?: number | nu
       const numeroArete = await generarSiguienteArete(tx, usuarioId);
       const rows = await tx`
         INSERT INTO bovinos
-          (usuario_id, numero_arete, nombre, raza, sexo, fecha_nacimiento, estado)
+          (usuario_id, numero_arete, nombre, raza, breed_id, sexo, fecha_nacimiento, estado)
         VALUES
           (${usuarioId}, ${numeroArete}, ${validacion.datos.nombre},
-           ${validacion.datos.raza}, ${validacion.datos.sexo},
+           ${validacion.datos.raza}, ${breed.id}, ${validacion.datos.sexo},
            ${optionalDate(args.fecha_nacimiento, "La fecha de nacimiento")}, ${estado})
         RETURNING *
       `;

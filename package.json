@@ -6,6 +6,7 @@
     "build": "nuxt build",
     "db:seed": "docker exec -i ganaderia_db psql -U ganaderia -d ganaderia_ai < database/seeds.sql",
     "db:migrate:week7": "docker exec -i ganaderia_db psql -U ganaderia -d ganaderia_ai < database/migrations/003_semana_07_multiagente.sql",
+    "db:migrate:platform": "docker exec -i ganaderia_db psql -v ON_ERROR_STOP=1 -U ganaderia -d ganaderia_ai < database/migrations/004_comunidad_transferencias_razas.sql",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
@@ -14,6 +15,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ia": "playwright test e2e/ia.spec.ts",
     "test:e2e:multi-agent": "playwright test e2e/ia.multi-agent.spec.ts",
+    "test:e2e:platform": "playwright test e2e/platform.spec.ts",
     "seed:stress": "tsx scripts/seed-stress.ts",
     "evaluate:agent": "tsx scripts/evaluar-agente.ts",
     "typecheck:scripts": "tsc --ignoreConfig --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck scripts/seed-stress.ts scripts/evaluar-agente.ts"

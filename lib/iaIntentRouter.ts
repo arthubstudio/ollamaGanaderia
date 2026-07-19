@@ -23,7 +23,7 @@ export function isActionRequest(text: string) {
     );
 
   const verboAccion =
-    /\b(crear|crea|cree|crear|registrar|registra|agregar|agrega|eliminar|elimina|borrar|borra|actualizar|actualiza|modificar|aplicar|aplicale|transferir|transfiere|designar|designa|quitar|asignar|asignale|dar de alta)\b/.test(
+    /\b(crear|crea|cree|crear|registrar|registra|agregar|agrega|eliminar|elimina|borrar|borra|actualizar|actualiza|modificar|aplicar|aplicale|transferir|transfiere|mandar|manda|enviar|envia|aceptar|acepta|rechazar|rechaza|cancelar|cancela|designar|designa|quitar|asignar|asignale|dar de alta)\b/.test(
       t
     );
 
@@ -223,6 +223,16 @@ export function isWriteActionIntent(text: string) {
     "insertar ",
     "transfiere ",
     "transferir ",
+    "manda ",
+    "mandar ",
+    "envia ",
+    "enviar ",
+    "acepta ",
+    "aceptar ",
+    "rechaza ",
+    "rechazar ",
+    "cancela ",
+    "cancelar ",
     "designa ",
     "designar ",
     "nueva vaca",
@@ -252,7 +262,13 @@ export function isWriteActionIntent(text: string) {
     "rancho",
     "ranchos",
     "propiedad",
-    "transferencia"
+    "transferencia",
+    "usuario",
+    "raza",
+    "amistad",
+    "contacto",
+    "mensaje",
+    "conversacion"
   ];
 
   const hasWriteVerb = writeVerbs.some((v) => t.includes(v));

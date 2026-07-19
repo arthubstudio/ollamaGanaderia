@@ -8,7 +8,12 @@ import {
   numeric,
   timestamp,
   vector,
-  uuid
+  uuid,
+  boolean,
+  bigint,
+  bigserial,
+  jsonb,
+  primaryKey
 } from "drizzle-orm/pg-core";
 
 export const aiLogs = pgTable(
@@ -161,6 +166,20 @@ export const conversationMessages =
     }
   );
 
+export const breeds = pgTable("breeds", {
+  id: serial("id").primaryKey(),
+  nombre: varchar("nombre", { length: 120 }).notNull(),
+  nombre_cientifico: varchar("nombre_cientifico", { length: 160 }),
+  pais_origen: varchar("pais_origen", { length: 120 }),
+  tipo: varchar("tipo", { length: 30 }).notNull().default("doble_proposito"),
+  descripcion: text("descripcion"),
+  activo: boolean("activo").notNull().default(true),
+  es_global: boolean("es_global").notNull().default(true),
+  created_by: integer("created_by").references(() => usuarios.id),
+  created_at: timestamp("created_at").defaultNow(),
+  updated_at: timestamp("updated_at").defaultNow()
+});
+
 // =====================================
 // BOVINOS
 // =====================================
@@ -204,6 +223,9 @@ export const bovinos = pgTable(
     usuario_id: integer(
       "usuario_id"
     ),
+
+    breed_id: integer("breed_id")
+      .references(() => breeds.id),
 
     created_at: timestamp(
       "created_at"
@@ -337,7 +359,12 @@ export const historialPropiedad =
 
       observaciones: text(
         "observaciones"
-      )
+      ),
+
+      propietario_usuario_id: integer("propietario_usuario_id")
+        .references(() => usuarios.id),
+
+      transfer_id: bigint("transfer_id", { mode: "number" })
 
     }
   );
@@ -569,6 +596,9 @@ export const semanticContexts =
         "usuario_id"
       ),
 
+      bovino_id: integer("bovino_id")
+        .references(() => bovinos.id),
+
       slot: text(
         "slot"
       ).notNull(),
@@ -598,3 +628,112 @@ export const semanticContexts =
 
     }
   );
+
+export const bovinoTransfers = pgTable("bovino_transfers", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  bovino_id: integer("bovino_id").notNull().references(() => bovinos.id),
+  source_user_id: integer("source_user_id").notNull().references(() => usuarios.id),
+  destination_user_id: integer("destination_user_id").notNull().references(() => usuarios.id),
+  source_rancho_id: integer("source_rancho_id").references(() => ranchos.id),
+  destination_rancho_id: integer("destination_rancho_id").references(() => ranchos.id),
+  status: varchar("status", { length: 20 }).notNull().default("PENDING"),
+  message: text("message"),
+  source_arete: varchar("source_arete", { length: 50 }),
+  destination_arete: varchar("destination_arete", { length: 50 }),
+  requested_at: timestamp("requested_at").defaultNow(),
+  responded_at: timestamp("responded_at"),
+  expires_at: timestamp("expires_at").notNull(),
+  created_at: timestamp("created_at").defaultNow(),
+  updated_at: timestamp("updated_at").defaultNow()
+});
+
+export const bovinoTransferEvents = pgTable("bovino_transfer_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  transfer_id: bigint("transfer_id", { mode: "number" }).notNull()
+    .references(() => bovinoTransfers.id),
+  bovino_id: integer("bovino_id").notNull().references(() => bovinos.id),
+  actor_user_id: integer("actor_user_id").references(() => usuarios.id),
+  event_type: varchar("event_type", { length: 30 }).notNull(),
+  from_user_id: integer("from_user_id").references(() => usuarios.id),
+  to_user_id: integer("to_user_id").references(() => usuarios.id),
+  metadata: jsonb("metadata").notNull().default({}),
+  created_at: timestamp("created_at").defaultNow()
+});
+
+export const notifications = pgTable("notifications", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  user_id: integer("user_id").notNull().references(() => usuarios.id),
+  actor_user_id: integer("actor_user_id").references(() => usuarios.id),
+  type: varchar("type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 180 }).notNull(),
+  body: text("body").notNull(),
+  entity_type: varchar("entity_type", { length: 50 }),
+  entity_id: varchar("entity_id", { length: 100 }),
+  data: jsonb("data").notNull().default({}),
+  created_at: timestamp("created_at").defaultNow()
+});
+
+export const notificationReads = pgTable("notification_reads", {
+  notification_id: bigint("notification_id", { mode: "number" }).notNull()
+    .references(() => notifications.id),
+  user_id: integer("user_id").notNull().references(() => usuarios.id),
+  read_at: timestamp("read_at").defaultNow()
+}, (table) => [primaryKey({ columns: [table.notification_id, table.user_id] })]);
+
+export const friendRequests = pgTable("friend_requests", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  sender_user_id: integer("sender_user_id").notNull().references(() => usuarios.id),
+  receiver_user_id: integer("receiver_user_id").notNull().references(() => usuarios.id),
+  status: varchar("status", { length: 20 }).notNull().default("PENDING"),
+  message: varchar("message", { length: 500 }),
+  created_at: timestamp("created_at").defaultNow(),
+  responded_at: timestamp("responded_at")
+});
+
+export const friendships = pgTable("friendships", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  user_low_id: integer("user_low_id").notNull().references(() => usuarios.id),
+  user_high_id: integer("user_high_id").notNull().references(() => usuarios.id),
+  created_from_request_id: bigint("created_from_request_id", { mode: "number" })
+    .references(() => friendRequests.id),
+  created_at: timestamp("created_at").defaultNow()
+});
+
+export const communityConversations = pgTable("community_conversations", {
+  id: uuid("id").primaryKey(),
+  kind: varchar("kind", { length: 20 }).notNull().default("direct"),
+  created_by: integer("created_by").notNull().references(() => usuarios.id),
+  created_at: timestamp("created_at").defaultNow(),
+  updated_at: timestamp("updated_at").defaultNow()
+});
+
+export const communityConversationMembers = pgTable("community_conversation_members", {
+  conversation_id: uuid("conversation_id").notNull()
+    .references(() => communityConversations.id),
+  user_id: integer("user_id").notNull().references(() => usuarios.id),
+  joined_at: timestamp("joined_at").defaultNow(),
+  last_read_message_id: bigint("last_read_message_id", { mode: "number" })
+}, (table) => [primaryKey({ columns: [table.conversation_id, table.user_id] })]);
+
+export const communityMessages = pgTable("community_messages", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  conversation_id: uuid("conversation_id").notNull()
+    .references(() => communityConversations.id),
+  sender_user_id: integer("sender_user_id").notNull().references(() => usuarios.id),
+  content: text("content").notNull(),
+  created_at: timestamp("created_at").defaultNow(),
+  edited_at: timestamp("edited_at"),
+  deleted_at: timestamp("deleted_at")
+});
+
+export const activityAuditLogs = pgTable("activity_audit_logs", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  actor_user_id: integer("actor_user_id").references(() => usuarios.id),
+  action: varchar("action", { length: 100 }).notNull(),
+  entity_type: varchar("entity_type", { length: 60 }).notNull(),
+  entity_id: varchar("entity_id", { length: 100 }),
+  success: boolean("success").notNull().default(true),
+  duration_ms: integer("duration_ms"),
+  metadata: jsonb("metadata").notNull().default({}),
+  created_at: timestamp("created_at").defaultNow()
+});

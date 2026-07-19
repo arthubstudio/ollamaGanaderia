@@ -16,8 +16,8 @@ export default defineEventHandler(async (event) => runApi(async () => {
   }
 
   const rows = await sql`
-    INSERT INTO usuarios (nombre, email, password_hash)
-    VALUES (${nombre}, ${email}, ${hashPassword(password)})
+    INSERT INTO usuarios (nombre, email, password_hash, rol)
+    VALUES (${nombre}, ${email}, ${hashPassword(password)}, 'usuario')
     RETURNING id, nombre, email, rol, created_at
   `;
 

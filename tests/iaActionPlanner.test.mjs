@@ -218,3 +218,33 @@ test("formatea aretes consecutivos con cuatro digitos", () => {
   assert.equal(formatAreteConsecutivo(9999), "MX-9999");
   assert.throws(() => formatAreteConsecutivo(10000), /ARETE_SEQUENCE_EXHAUSTED/);
 });
+
+test("planea transferencia entre cuentas y exige confirmacion", () => {
+  const result = planIaTurn({
+    text: "Manda la vaca Lola al usuario Carlos",
+    pending: null
+  });
+  assert.equal(result.kind, "pending");
+  assert.equal(result.pending.tool, "crearSolicitudTransferencia");
+  assert.equal(result.pending.args.nombre_bovino, "Lola");
+  assert.equal(result.pending.args.usuario_destino, "Carlos");
+  assert.equal(result.pending.awaitingConfirmation, true);
+});
+
+test("limita el listado conversacional de razas a la tool especializada", () => {
+  const result = planIaTurn({ text: "Que razas tienes?", pending: null });
+  assert.equal(result.kind, "query");
+  assert.equal(result.query.tool, "listarRazas");
+  assert.equal(result.query.args.limite, 10);
+});
+
+test("extrae destinatario y contenido de un mensaje comunitario", () => {
+  const result = planIaTurn({
+    text: "Enviale un mensaje a Carlos: Recibiste el bovino?",
+    pending: null
+  });
+  assert.equal(result.kind, "pending");
+  assert.equal(result.pending.tool, "enviarMensaje");
+  assert.equal(result.pending.args.usuario_destino, "Carlos");
+  assert.equal(result.pending.args.mensaje, "Recibiste el bovino");
+});

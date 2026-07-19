@@ -460,6 +460,11 @@ ACCIONES (puedo hacerlo por ti):
 • Crear, actualizar y eliminar dueños y ranchos
 • Transferir propiedad o quitar asignaciones de dueño/rancho
 • Registrar pesos
+• Enviar bovinos a otros usuarios mediante solicitudes seguras
+• Aceptar, rechazar, cancelar y consultar transferencias
+• Consultar y crear razas del catalogo global
+• Enviar solicitudes de contacto y mensajes privados
+• Consultar conversaciones comunitarias
 
 Ejemplos:
 
@@ -751,6 +756,10 @@ export default defineEventHandler(async (event) => {
       params: query
     });
 
+    if (query.type === "tool") {
+      return executePlannerAction(query.tool, query.args ?? {});
+    }
+
     if (query.type === "count") {
       const target = query.target;
       let rows: any[];
@@ -988,6 +997,29 @@ export default defineEventHandler(async (event) => {
       });
 
       toolsExecuted[toolsExecuted.length - 1].result = response;
+      const toolResult = response?.resultado;
+      if (tool === "crearBovino" && toolResult?.requiresBreedCreation) {
+        setPendingIaAction(conversationId, usuarioId, {
+          tool: "crearRazaYBovino",
+          args,
+          missing: [],
+          awaitingConfirmation: true
+        });
+        return await finish(
+          "planner",
+          `La raza "${toolResult.requestedBreed}" no existe registrada. Deseas crearla y despues registrar el bovino?`,
+          { tools: toolsExecuted }
+        );
+      }
+      if (tool === "crearSolicitudTransferencia" && toolResult?.requiresDestinationSelection) {
+        setPendingIaAction(conversationId, usuarioId, {
+          tool,
+          args: { ...args, usuario_destino: "" },
+          missing: ["usuario_destino"],
+          awaitingConfirmation: false
+        });
+        return await finish("planner", response.respuesta, { tools: toolsExecuted });
+      }
       const resultBovino = response?.resultado?.bovino;
       if (resultBovino?.id && resultBovino?.nombre) {
         setIaConversationBovino(conversationId, usuarioId, resultBovino, tool);

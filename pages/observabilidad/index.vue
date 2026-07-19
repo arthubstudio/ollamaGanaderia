@@ -4,6 +4,7 @@ definePageMeta({
 });
 
 const { data: logs } = await useFetch("/api/observabilidad");
+const { data: activityLogs } = await useFetch("/api/observabilidad/activity");
 
 function parseTools(raw: unknown) {
   if (!raw) return [];
@@ -130,6 +131,24 @@ function yesNo(value: unknown) {
               {{ log.timestamp }}
             </td>
           </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="text-2xl font-bold mt-10 mb-4">Auditoria operativa</h2>
+    <div class="bg-white rounded-3xl border border-gray-100 overflow-x-auto">
+      <table class="w-full min-w-[900px]">
+        <thead class="bg-gray-50"><tr><th class="p-4 text-left">Accion</th><th class="p-4 text-left">Entidad</th><th class="p-4 text-left">Actor</th><th class="p-4 text-left">Resultado</th><th class="p-4 text-left">Tiempo</th><th class="p-4 text-left">Fecha</th></tr></thead>
+        <tbody>
+          <tr v-for="item in activityLogs" :key="item.id" class="border-t">
+            <td class="p-4 font-semibold">{{ item.action }}</td>
+            <td class="p-4">{{ item.entity_type }} <span class="text-gray-400">#{{ item.entity_id }}</span></td>
+            <td class="p-4">{{ item.actor_name || "Sistema" }}</td>
+            <td class="p-4" :class="item.success ? 'text-emerald-700' : 'text-red-700'">{{ item.success ? "Correcto" : "Error" }}</td>
+            <td class="p-4">{{ item.duration_ms != null ? `${item.duration_ms} ms` : "-" }}</td>
+            <td class="p-4 text-sm text-gray-500">{{ item.created_at }}</td>
+          </tr>
+          <tr v-if="!activityLogs?.length"><td colspan="6" class="p-8 text-center text-gray-500">Sin actividad operativa registrada.</td></tr>
         </tbody>
       </table>
     </div>

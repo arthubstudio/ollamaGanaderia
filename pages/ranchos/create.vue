@@ -27,11 +27,16 @@ const form = reactive({
 
   ubicacion: "",
 
-  dueno_id: null as number | null
+  dueno_ids: [] as number[]
 
 });
+const loading = ref(false);
+const errorMessage = ref("");
 
 async function crear() {
+
+  if (loading.value) return;
+  errorMessage.value = "";
 
   if (!usuario.value?.id) {
 
@@ -43,9 +48,11 @@ async function crear() {
 
   }
 
-  await $fetch(
-    "/api/ranchos",
-    {
+  try {
+    loading.value = true;
+    await $fetch(
+      "/api/ranchos",
+      {
 
       method: "POST",
 
@@ -58,12 +65,17 @@ async function crear() {
 
       }
 
-    }
-  );
+      }
+    );
 
-  await navigateTo(
-    "/ranchos"
-  );
+    await navigateTo(
+      "/ranchos"
+    );
+  } catch (error: any) {
+    errorMessage.value = error?.data?.data?.message ?? "No se pudo crear el rancho.";
+  } finally {
+    loading.value = false;
+  }
 
 }
 
@@ -95,32 +107,22 @@ async function crear() {
         class="w-full border border-gray-200 rounded-2xl p-4 h-28"
       />
 
-      <select
-        v-model="form.dueno_id"
-        class="w-full border border-gray-200 rounded-2xl p-4"
-      >
+      <fieldset class="space-y-2">
+        <legend class="font-semibold mb-2">Dueños del rancho</legend>
+        <label v-for="d in duenos ?? []" :key="d.id" class="flex items-center gap-3">
+          <input v-model="form.dueno_ids" type="checkbox" :value="Number(d.id)" />
+          <span>{{ d.nombre }}</span>
+        </label>
+      </fieldset>
 
-        <option
-          :value="null"
-        >
-          Selecciona dueño
-        </option>
-
-        <option
-          v-for="d in duenos"
-          :key="d.id"
-          :value="d.id"
-        >
-          {{ d.nombre }}
-        </option>
-
-      </select>
+      <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
 
       <button
         @click="crear"
-        class="bg-black text-white px-6 py-4 rounded-2xl"
+        :disabled="loading"
+        class="bg-black text-white px-6 py-4 rounded-2xl disabled:opacity-50"
       >
-        Guardar
+        {{ loading ? "Guardando..." : "Guardar" }}
       </button>
 
     </div>

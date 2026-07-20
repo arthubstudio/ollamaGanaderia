@@ -9,8 +9,8 @@ export default async function handleNitroError(error: any, event: H3Event) {
   const statusCode = Number(error?.statusCode ?? 500);
   const isApi = String(event.path ?? "").startsWith("/api/");
   const fallbackMessage = statusCode >= 500
-    ? "No se pudo completar la operacion."
-    : "La solicitud no pudo completarse.";
+    ? "La operacion fallo por un error interno. Consulta el registro del servidor con el codigo INTERNAL_ERROR."
+    : "La solicitud fue rechazada por una validacion del servidor.";
   const message = String(error?.data?.message ?? error?.statusMessage ?? fallbackMessage);
   const code = String(error?.data?.code ?? (statusCode >= 500 ? "INTERNAL_ERROR" : "REQUEST_ERROR"));
 

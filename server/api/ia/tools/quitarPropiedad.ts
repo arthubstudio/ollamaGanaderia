@@ -1,11 +1,6 @@
-import postgres from "postgres";
+import { sql } from "~/lib/db";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 import { findBovinoByNombre } from "./findBovino";
-
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  { prepare: false }
-);
 
 export async function quitarPropiedad(
   args: {
@@ -46,19 +41,30 @@ export async function quitarPropiedad(
     return { ok: false as const, error: "Indica si deseas quitar el dueño, el rancho o ambos." };
   }
 
-  if (nuevoDuenoId === null && nuevoRanchoId === null) {
-    await sql`
-      UPDATE historial_propiedad
-      SET fecha_fin = CURRENT_DATE
-      WHERE id = ${row.id}
-    `;
-  } else {
-    await sql`
-      UPDATE historial_propiedad
-      SET dueno_id = ${nuevoDuenoId}, rancho_id = ${nuevoRanchoId}
-      WHERE id = ${row.id}
-    `;
-  }
+  await sql.begin(async (tx) => {
+    if (nuevoDuenoId === null && nuevoRanchoId === null) {
+      await tx`
+        UPDATE historial_propiedad
+        SET fecha_fin = CURRENT_DATE
+        WHERE id = ${row.id}
+      `;
+    } else {
+      await tx`
+        UPDATE historial_propiedad
+        SET dueno_id = ${nuevoDuenoId}, rancho_id = ${nuevoRanchoId}
+        WHERE id = ${row.id}
+      `;
+    }
+    if (quitarDueno) {
+      await tx`DELETE FROM bovino_duenos WHERE bovino_id = ${bovino.id}`;
+    }
+    if (quitarRancho) {
+      await tx`
+        UPDATE bovinos SET rancho_id = NULL, updated_at = NOW()
+        WHERE id = ${bovino.id} AND usuario_id = ${usuarioId}
+      `;
+    }
+  });
 
   await rebuildBovinoContext(bovino.id);
 

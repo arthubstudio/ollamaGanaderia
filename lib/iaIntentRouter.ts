@@ -23,7 +23,7 @@ export function isActionRequest(text: string) {
     );
 
   const verboAccion =
-    /\b(crear|crea|cree|crear|registrar|registra|agregar|agrega|eliminar|elimina|borrar|borra|actualizar|actualiza|modificar|aplicar|aplicale|transferir|transfiere|mandar|manda|enviar|envia|aceptar|acepta|rechazar|rechaza|cancelar|cancela|designar|designa|quitar|asignar|asignale|dar de alta)\b/.test(
+    /\b(crear|crea|cree|crear|registrar|registra|agregar|agrega|eliminar|elimina|borrar|borra|actualizar|actualiza|modificar|aplicar|aplicale|transferir|transfiere|transfiera|mandar|manda|enviar|envia|pasar|pasa|traspasar|traspasa|aceptar|acepta|rechazar|rechaza|cancelar|cancela|designar|designa|quitar|asignar|asignale|dar de alta)\b/.test(
       t
     );
 
@@ -85,7 +85,7 @@ export function isReadQuery(text: string) {
   if (!consultaExplicita) return false;
 
   const verbosEscritura =
-    /\b(crear|crea|cree|registrar|registra|agregar|agrega|eliminar|elimina|borrar|borra|actualizar|actualiza|modificar|aplicar|aplicale|asignar|asignale|transferir|transfiere|designar|designa|quitar)\b/.test(
+    /\b(crear|crea|cree|registrar|registra|agregar|agrega|eliminar|elimina|borrar|borra|actualizar|actualiza|modificar|aplicar|aplicale|asignar|asignale|transferir|transfiere|transfiera|enviar|envia|mandar|manda|pasar|pasa|traspasar|traspasa|designar|designa|quitar)\b/.test(
       t
     );
 
@@ -135,7 +135,7 @@ export function needsBovinoAssignment(text: string) {
   const t = normalizeIntentText(text);
 
   return (
-    /\b(aplicar|aplicale|aplicarle|asignar|asignale|asignarle|transferir|transfiere|transfierelo|transfierela|designar|designale|darle|ponerle|ponle|propiedad de|propiedad del|propiedad a)\b/.test(
+    /\b(aplicar|aplicale|aplicarle|asignar|asignale|asignarle|transferir|transfiere|transfiera|transfierelo|transfierela|enviar|envia|mandar|manda|pasar|pasa|traspasar|traspasa|designar|designale|darle|ponerle|ponle|propiedad de|propiedad del|propiedad a)\b/.test(
       t
     ) ||
     (/\b(dueno|dueño|rancho)\b/.test(t) &&
@@ -157,7 +157,7 @@ export function isCreateOnlyCatalog(text: string) {
   if (!crea || !entidadCatalogo) return false;
 
   if (needsBovinoAssignment(text)) return false;
-  if (/\b(transferir|transferencia|propiedad)\b/.test(t)) return false;
+  if (/\b(transferir|transfiere|transfiera|transferencia|enviar|mandar|pasar|traspasar|propiedad)\b/.test(t)) return false;
 
   return true;
 }
@@ -222,11 +222,16 @@ export function isWriteActionIntent(text: string) {
     "inserta ",
     "insertar ",
     "transfiere ",
+    "transfiera ",
     "transferir ",
     "manda ",
     "mandar ",
     "envia ",
     "enviar ",
+    "pasa ",
+    "pasar ",
+    "traspasa ",
+    "traspasar ",
     "acepta ",
     "aceptar ",
     "rechaza ",

@@ -2,10 +2,58 @@ import { sql } from "~/lib/db";
 import { generarSiguienteArete } from "~/lib/areteService";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 import { recordActivity } from "~/server/services/activityAudit";
-import { resolveSingleUser } from "~/server/services/userDirectory";
+import { resolveTransferUser } from "~/server/services/userDirectory";
+import { getRanchoOwnerIds, syncBovinoOwners } from "~/server/services/ownershipRelations";
 import { apiError, optionalId, optionalText, parseId } from "~/server/utils/api";
 
 export type TransferStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "EXPIRED";
+
+type TransferFailureReason =
+  | "bovino_required"
+  | "destination_required"
+  | "bovino_not_found"
+  | "user_not_found"
+  | "ambiguous_user"
+  | "pending_exists"
+  | "self_transfer"
+  | "internal_error";
+
+async function transferFailure(input: {
+  sourceUserId: number;
+  bovinoId?: unknown;
+  bovinoName?: unknown;
+  destinationQuery?: unknown;
+}, reason: TransferFailureReason, error: string, extra: Record<string, unknown> = {}) {
+  const metadata = {
+    reason,
+    bovino_id: input.bovinoId ?? null,
+    bovino_name: String(input.bovinoName ?? "").trim() || null,
+    destination_query: String(input.destinationQuery ?? "").trim() || null,
+    ...extra
+  };
+
+  console.warn("Solicitud de transferencia rechazada", {
+    source_user_id: input.sourceUserId,
+    ...metadata
+  });
+
+  try {
+    await recordActivity({
+      actorUserId: input.sourceUserId,
+      action: "transfer.request_failed",
+      entityType: "bovino_transfer",
+      success: false,
+      metadata
+    });
+  } catch (auditError) {
+    console.error("No se pudo registrar el fallo de transferencia", {
+      reason,
+      auditError
+    });
+  }
+
+  return { ok: false as const, reason, error, ...extra };
+}
 
 async function expirePendingTransfers() {
   const expired = await sql`
@@ -53,99 +101,161 @@ export async function createBovinoTransfer(input: {
   message?: unknown;
 }) {
   await expirePendingTransfers();
-  const destination = await resolveSingleUser(input.destinationQuery, input.sourceUserId);
-  if (destination.status === "not_found") {
-    return { ok: false as const, reason: "not_found" as const, matches: [] };
-  }
-  if (destination.status === "ambiguous") {
-    return { ok: false as const, reason: "ambiguous" as const, matches: destination.matches };
-  }
-
   const bovinoId = input.bovinoId == null || input.bovinoId === ""
     ? null
     : parseId(input.bovinoId, "bovino_id");
   const bovinoName = optionalText(input.bovinoName, 100);
   if (!bovinoId && !bovinoName) {
-    apiError({ statusCode: 400, code: "BOVINO_REQUIRED", message: "Indica el bovino a transferir." });
+    return transferFailure(input, "bovino_required", "Indica el bovino que deseas transferir.");
   }
+
+  const destinationQuery = optionalText(input.destinationQuery, 150);
+  if (!destinationQuery) {
+    return transferFailure(input, "destination_required", "Indica el nombre o correo del usuario destino.");
+  }
+
+  const destination = await resolveTransferUser(destinationQuery, input.sourceUserId);
+  if (destination.status === "not_found") {
+    return transferFailure(input, "user_not_found", `Usuario destino no encontrado: "${destinationQuery}".`, {
+      matches: []
+    });
+  }
+  if (destination.status === "ambiguous") {
+    return transferFailure(input, "ambiguous_user", "Hay varios usuarios con ese nombre. Indica el correo exacto.", {
+      matches: destination.matches
+    });
+  }
+  if (destination.status === "self") {
+    return transferFailure(input, "self_transfer", "No puedes transferir un bovino a tu propia cuenta.", {
+      destination_user_id: destination.user.id
+    });
+  }
+
   const destinationRanchoId = optionalId(input.destinationRanchoId, "destination_rancho_id");
   const message = optionalText(input.message, 1000);
   const startedAt = Date.now();
 
-  const transfer = await sql.begin(async (tx) => {
-    const bovinos = bovinoId
-      ? await tx`SELECT * FROM bovinos WHERE id = ${bovinoId} FOR UPDATE`
-      : await tx`
-          SELECT * FROM bovinos
-          WHERE usuario_id = ${input.sourceUserId}
-            AND (LOWER(nombre) = LOWER(${bovinoName}) OR LOWER(numero_arete) = LOWER(${bovinoName}))
-          LIMIT 2 FOR UPDATE
+  try {
+    const outcome = await sql.begin(async (tx) => {
+      const bovinos = bovinoId
+        ? await tx`
+            SELECT * FROM bovinos
+            WHERE id = ${bovinoId} AND usuario_id = ${input.sourceUserId}
+            FOR UPDATE
+          `
+        : await tx`
+            SELECT * FROM bovinos
+            WHERE usuario_id = ${input.sourceUserId}
+              AND (LOWER(nombre) = LOWER(${bovinoName}) OR LOWER(numero_arete) = LOWER(${bovinoName}))
+            LIMIT 2 FOR UPDATE
+          `;
+      const bovino = bovinos[0];
+      if (!bovino) {
+        return { ok: false as const, reason: "bovino_not_found" as const };
+      }
+
+      await ensureDestinationRancho(tx, destinationRanchoId, destination.user.id);
+
+      const currentHistory = await tx`
+        SELECT rancho_id FROM historial_propiedad
+        WHERE bovino_id = ${bovino.id} AND fecha_fin IS NULL
+        ORDER BY fecha_inicio DESC, id DESC LIMIT 1
+      `;
+
+      const rows = await tx`
+        INSERT INTO bovino_transfers (
+          bovino_id, source_user_id, destination_user_id,
+          source_rancho_id, destination_rancho_id,
+          status, message, source_arete
+        ) VALUES (
+          ${bovino.id}, ${input.sourceUserId}, ${destination.user.id},
+          ${currentHistory[0]?.rancho_id ?? null}, ${destinationRanchoId},
+          'PENDING', ${message}, ${bovino.numero_arete}
+        )
+        ON CONFLICT (bovino_id) WHERE status = 'PENDING'
+        DO NOTHING
+        RETURNING *
+      `;
+      const created = rows[0];
+      if (!created) {
+        const pending = await tx`
+          SELECT id, destination_user_id, requested_at
+          FROM bovino_transfers
+          WHERE bovino_id = ${bovino.id} AND status = 'PENDING'
+          LIMIT 1
         `;
-    const bovino = bovinos.find((item: any) => Number(item.usuario_id) === input.sourceUserId);
-    if (!bovino) {
-      apiError({ statusCode: 404, code: "NOT_FOUND", message: "Bovino no encontrado en tu cuenta." });
-    }
+        return {
+          ok: false as const,
+          reason: "pending_exists" as const,
+          bovino,
+          pending_transfer: pending[0] ?? null
+        };
+      }
 
-    await ensureDestinationRancho(tx, destinationRanchoId, destination.user.id);
+      await tx`
+        INSERT INTO bovino_transfer_events (
+          transfer_id, bovino_id, actor_user_id, event_type,
+          from_user_id, to_user_id, metadata
+        ) VALUES (
+          ${created.id}, ${bovino.id}, ${input.sourceUserId}, 'REQUESTED',
+          ${input.sourceUserId}, ${destination.user.id},
+          ${JSON.stringify({ message })}::jsonb
+        )
+      `;
 
-    const currentHistory = await tx`
-      SELECT rancho_id FROM historial_propiedad
-      WHERE bovino_id = ${bovino.id} AND fecha_fin IS NULL
-      ORDER BY fecha_inicio DESC, id DESC LIMIT 1
-    `;
+      await tx`
+        INSERT INTO notifications (
+          user_id, actor_user_id, type, title, body,
+          entity_type, entity_id, data
+        ) VALUES (
+          ${destination.user.id}, ${input.sourceUserId}, 'BOVINO_TRANSFER_REQUEST',
+          'Nueva transferencia de bovino',
+          ${`${bovino.nombre} fue enviado a tu cuenta para aceptacion.`},
+          'bovino_transfer', ${String(created.id)},
+          ${JSON.stringify({ transfer_id: Number(created.id), bovino_id: Number(bovino.id) })}::jsonb
+        )
+      `;
 
-    const rows = await tx`
-      INSERT INTO bovino_transfers (
-        bovino_id, source_user_id, destination_user_id,
-        source_rancho_id, destination_rancho_id,
-        status, message, source_arete
-      ) VALUES (
-        ${bovino.id}, ${input.sourceUserId}, ${destination.user.id},
-        ${currentHistory[0]?.rancho_id ?? null}, ${destinationRanchoId},
-        'PENDING', ${message}, ${bovino.numero_arete}
-      )
-      RETURNING *
-    `;
-    const created = rows[0];
+      await recordActivity({
+        actorUserId: input.sourceUserId,
+        action: "transfer.requested",
+        entityType: "bovino_transfer",
+        entityId: created.id,
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          bovino_id: Number(bovino.id),
+          bovino_name: String(bovino.nombre),
+          destination_user_id: destination.user.id,
+          destination_query: destinationQuery,
+          destination_match: destination.user.match_type
+        },
+        client: tx
+      });
 
-    await tx`
-      INSERT INTO bovino_transfer_events (
-        transfer_id, bovino_id, actor_user_id, event_type,
-        from_user_id, to_user_id, metadata
-      ) VALUES (
-        ${created.id}, ${bovino.id}, ${input.sourceUserId}, 'REQUESTED',
-        ${input.sourceUserId}, ${destination.user.id},
-        ${JSON.stringify({ message })}::jsonb
-      )
-    `;
-
-    await tx`
-      INSERT INTO notifications (
-        user_id, actor_user_id, type, title, body,
-        entity_type, entity_id, data
-      ) VALUES (
-        ${destination.user.id}, ${input.sourceUserId}, 'BOVINO_TRANSFER_REQUEST',
-        'Nueva transferencia de bovino',
-        ${`${bovino.nombre} fue enviado a tu cuenta para aceptacion.`},
-        'bovino_transfer', ${String(created.id)},
-        ${JSON.stringify({ transfer_id: Number(created.id), bovino_id: Number(bovino.id) })}::jsonb
-      )
-    `;
-
-    await recordActivity({
-      actorUserId: input.sourceUserId,
-      action: "transfer.requested",
-      entityType: "bovino_transfer",
-      entityId: created.id,
-      durationMs: Date.now() - startedAt,
-      metadata: { bovino_id: Number(bovino.id), destination_user_id: destination.user.id },
-      client: tx
+      return {
+        ok: true as const,
+        transfer: { ...created, bovino, destination: destination.user }
+      };
     });
 
-    return { ...created, bovino, destination: destination.user };
-  });
+    if (!outcome.ok && outcome.reason === "bovino_not_found") {
+      return transferFailure(input, "bovino_not_found", "Bovino no encontrado en tu cuenta.");
+    }
+    if (!outcome.ok && outcome.reason === "pending_exists") {
+      return transferFailure(input, "pending_exists", "Ya existe una solicitud pendiente para este bovino.", {
+        pending_transfer: outcome.pending_transfer,
+        bovino: outcome.bovino
+      });
+    }
 
-  return { ok: true as const, transfer };
+    return outcome;
+  } catch (error: any) {
+    await transferFailure(input, "internal_error", "No se pudo crear la solicitud de transferencia.", {
+      validation_stage: "database_transaction",
+      database_code: error?.code ?? null
+    });
+    throw error;
+  }
 }
 
 export async function listBovinoTransfers(userId: number, direction?: unknown, status?: unknown) {
@@ -231,6 +341,15 @@ export async function acceptBovinoTransfer(userId: number, transferIdValue: unkn
 
     const destinationRanchoId = requestedRanchoId ?? transfer.destination_rancho_id ?? null;
     await ensureDestinationRancho(tx, destinationRanchoId, userId);
+    const previousHistoryRows = await tx`
+      SELECT dueno_id, rancho_id
+      FROM historial_propiedad
+      WHERE bovino_id = ${bovino.id} AND fecha_fin IS NULL
+      ORDER BY fecha_inicio DESC NULLS LAST, id DESC
+      LIMIT 1
+    `;
+    const previousHistory = previousHistoryRows[0] ?? null;
+    const destinationOwnerIds = await getRanchoOwnerIds(tx, destinationRanchoId);
 
     let destinationArete = String(bovino.numero_arete);
     const conflict = await tx`
@@ -254,15 +373,22 @@ export async function acceptBovinoTransfer(userId: number, transferIdValue: unkn
     `;
     await tx`
       UPDATE bovinos
-      SET usuario_id = ${userId}, numero_arete = ${destinationArete}, updated_at = NOW()
+      SET usuario_id = ${userId}, rancho_id = ${destinationRanchoId},
+          numero_arete = ${destinationArete}, updated_at = NOW()
       WHERE id = ${bovino.id}
     `;
+    await syncBovinoOwners({
+      client: tx,
+      userId,
+      bovinoId: Number(bovino.id),
+      duenoIds: destinationOwnerIds
+    });
     await tx`
       INSERT INTO historial_propiedad (
         bovino_id, dueno_id, rancho_id, propietario_usuario_id,
         transfer_id, fecha_inicio, observaciones
       ) VALUES (
-        ${bovino.id}, NULL, ${destinationRanchoId}, ${userId},
+        ${bovino.id}, ${destinationOwnerIds[0] ?? null}, ${destinationRanchoId}, ${userId},
         ${transferId}, CURRENT_DATE,
         ${`Transferencia aceptada desde el usuario ${transfer.source_user_id}.`}
       )
@@ -282,7 +408,14 @@ export async function acceptBovinoTransfer(userId: number, transferIdValue: unkn
       ) VALUES (
         ${transferId}, ${bovino.id}, ${userId}, 'ACCEPTED',
         ${transfer.source_user_id}, ${userId},
-        ${JSON.stringify({ source_arete: bovino.numero_arete, destination_arete: destinationArete })}::jsonb
+        ${JSON.stringify({
+          source_arete: bovino.numero_arete,
+          destination_arete: destinationArete,
+          previous_rancho_id: previousHistory?.rancho_id ?? null,
+          previous_dueno_id: previousHistory?.dueno_id ?? null,
+          destination_rancho_id: destinationRanchoId,
+          destination_dueno_ids: destinationOwnerIds
+        })}::jsonb
       )
     `;
     await tx`
@@ -306,7 +439,16 @@ export async function acceptBovinoTransfer(userId: number, transferIdValue: unkn
       client: tx
     });
 
-    return { transfer: accepted[0], bovino: { ...bovino, usuario_id: userId, numero_arete: destinationArete } };
+    return {
+      transfer: accepted[0],
+      bovino: {
+        ...bovino,
+        usuario_id: userId,
+        rancho_id: destinationRanchoId,
+        numero_arete: destinationArete,
+        dueno_ids: destinationOwnerIds
+      }
+    };
   });
 
   await rebuildBovinoContext(Number(result.bovino.id));
@@ -408,4 +550,3 @@ export async function getBovinoOwnershipTimeline(userId: number, bovinoIdValue: 
     ORDER BY e.created_at ASC, e.id ASC
   `;
 }
-

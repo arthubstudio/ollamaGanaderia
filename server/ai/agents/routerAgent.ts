@@ -21,9 +21,9 @@ function normalize(value: string) {
     .trim();
 }
 
-const WRITE_PATTERN = /\b(crea|crear|registra|registrar|agrega|agregar|aplica|aplicar|vacuna|vacunar|actualiza|actualizar|modifica|modificar|cambia|cambiar|transfiere|transferir|manda|mandar|envia|enviar|acepta|aceptar|rechaza|rechazar|cancela|cancelar|asigna|asignar|elimina|eliminar|borra|borrar|quita|quitar|anota|anotar|ponle)\b/;
+const WRITE_PATTERN = /\b(crea|crear|registra|registrar|registrale|agrega|agregar|agregale|aplica|aplicar|aplicale|vacuna|vacunar|vacunale|actualiza|actualizar|actualizale|modifica|modificar|cambia|cambiar|cambiale|transfiere|transfiera|transferir|manda|mandar|mandale|envia|enviar|enviale|pasa|pasar|traspasa|traspasar|acepta|aceptar|rechaza|rechazar|cancela|cancelar|asigna|asignar|elimina|eliminar|borra|borrar|quita|quitar|anota|anotar|anotale|ponle)\b/;
 const DATA_TARGET_PATTERN = /\b(bovino|bovinos|vaca|vacas|toro|toros|ganado|peso|pesos|vacuna|vacunas|vacunacion|enfermedad|enfermedades|brucelosis|clostridial|clostridiales|respiratorio|salud|nutricion|alimentacion|bioseguridad|rancho|ranchos|dueno|duenos|arete|venta|ventas|propiedad|historial|transferencia|transferencias|usuario|usuarios|raza|razas|contacto|contactos|amigo|amigos|amistad|mensaje|mensajes|conversacion|conversaciones|notificacion|notificaciones)\b/;
-const DATABASE_QUERY_PATTERN = /\b(cuantos|cuantas|lista|listar|muestra|muestrame|tengo|tiene|pesa|peso de|vacunas de|enfermedades de|estado de|historial de|busca|buscar|arete|listo para venta|lista para venta|recibidos|enviados|conversaciones|contactos|razas)\b/;
+const DATABASE_QUERY_PATTERN = /\b(cuantos|cuantas|lista|listar|enlista|dame|disponibles|registradas|muestra|muestrame|tengo|tiene|pesa|peso de|vacunas de|enfermedades de|estado de|historial de|busca|buscar|arete|listo para venta|lista para venta|recibidos|enviados|conversaciones|contactos|razas)\b/;
 const KNOWLEDGE_PATTERN = /\b(que es|que son|como funciona|como prevenir|como tratar|explica|explicame|recomendaciones|manejo|sintomas|causas|cuidados|salud|nutricion|alimentacion|calendario|por que|para que sirve|buenas practicas)\b/;
 const MEMORY_QUERY_PATTERN = /\b(que recuerdas|que sabes de mi|mis memorias|mi preferencia|recuerdas de mi)\b/;
 const MEMORY_WRITE_PATTERN = /^(recuerda(?: que)?|soy |me llamo |vivo en |trabajo en |me gusta |no me gusta |prefiero |mi .+ es )/;

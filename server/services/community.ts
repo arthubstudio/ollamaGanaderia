@@ -1,6 +1,6 @@
 import { sql } from "~/lib/db";
 import { recordActivity } from "~/server/services/activityAudit";
-import { resolveSingleUser } from "~/server/services/userDirectory";
+import { resolveExactUser, resolveSingleUser } from "~/server/services/userDirectory";
 import { apiError, optionalText, parseId, requiredText } from "~/server/utils/api";
 
 function pair(userA: number, userB: number) {
@@ -22,8 +22,13 @@ export async function sendFriendRequest(input: {
   recipientQuery: unknown;
   message?: unknown;
 }) {
-  const recipient = await resolveSingleUser(input.recipientQuery, input.senderUserId);
-  if (recipient.status !== "found") return { ok: false as const, reason: recipient.status, matches: recipient.matches };
+  const recipient = await resolveExactUser(input.recipientQuery, input.senderUserId);
+  if (recipient.status === "self") {
+    return { ok: false as const, reason: "self_request" as const, user: recipient.user, matches: recipient.matches };
+  }
+  if (recipient.status !== "found") {
+    return { ok: false as const, reason: recipient.status, matches: recipient.matches };
+  }
   if (await areFriends(input.senderUserId, recipient.user.id)) {
     return { ok: false as const, reason: "already_friends" as const, user: recipient.user };
   }
@@ -36,7 +41,7 @@ export async function sendFriendRequest(input: {
     LIMIT 1
   `;
   if (existingPending.length) {
-    return { ok: true as const, alreadyPending: true, request: existingPending[0], user: recipient.user };
+    return { ok: false as const, reason: "already_pending" as const, request: existingPending[0], user: recipient.user };
   }
 
   const inverse = await sql`
@@ -55,9 +60,11 @@ export async function sendFriendRequest(input: {
     const rows = await tx`
       INSERT INTO friend_requests (sender_user_id, receiver_user_id, message)
       VALUES (${input.senderUserId}, ${recipient.user.id}, ${optionalText(input.message, 500)})
+      ON CONFLICT DO NOTHING
       RETURNING *
     `;
     const created = rows[0];
+    if (!created) return null;
     await tx`
       INSERT INTO notifications (
         user_id, actor_user_id, type, title, body, entity_type, entity_id
@@ -78,6 +85,22 @@ export async function sendFriendRequest(input: {
     });
     return created;
   });
+
+  if (!request) {
+    const pending = await sql`
+      SELECT * FROM friend_requests
+      WHERE status = 'PENDING'
+        AND LEAST(sender_user_id, receiver_user_id) = LEAST(${input.senderUserId}, ${recipient.user.id})
+        AND GREATEST(sender_user_id, receiver_user_id) = GREATEST(${input.senderUserId}, ${recipient.user.id})
+      LIMIT 1
+    `;
+    return {
+      ok: false as const,
+      reason: "already_pending" as const,
+      request: pending[0] ?? null,
+      user: recipient.user
+    };
+  }
 
   return { ok: true as const, request, user: recipient.user };
 }
@@ -259,8 +282,10 @@ export async function sendCommunityMessage(input: {
   conversationId?: unknown;
   contactUserId?: unknown;
   content: unknown;
+  clientMessageId?: unknown;
 }) {
   const content = requiredText(input.content, "mensaje", 4000);
+  const clientMessageId = optionalText(input.clientMessageId, 100);
   let conversationId = optionalText(input.conversationId, 100);
   if (!conversationId) {
     const conversation = await getOrCreateDirectConversation(input.userId, input.contactUserId);
@@ -296,7 +321,54 @@ export async function sendCommunityMessage(input: {
       )
     `;
     await recordActivity({ actorUserId: input.userId, action: "message.sent", entityType: "community_message", entityId: rows[0].id, metadata: { conversation_id: conversationId }, client: tx });
-    return rows[0];
+    return { ...rows[0], client_message_id: clientMessageId };
+  });
+}
+
+export async function listCommunityUpdates(userId: number, afterValue?: unknown) {
+  const after = Math.max(Number(afterValue) || 0, 0);
+  const messages = await sql`
+    SELECT m.id, m.conversation_id, m.sender_user_id, m.content, m.created_at,
+           u.nombre AS sender_name,
+           (m.sender_user_id = ${userId}) AS is_mine
+    FROM community_messages m
+    JOIN community_conversation_members member
+      ON member.conversation_id = m.conversation_id AND member.user_id = ${userId}
+    JOIN usuarios u ON u.id = m.sender_user_id
+    WHERE m.deleted_at IS NULL AND m.id > ${after}
+    ORDER BY m.id ASC
+    LIMIT 200
+  `;
+  const cursor = Number(messages[messages.length - 1]?.id ?? after);
+  const conversations = await listCommunityConversations(userId);
+  return { cursor, messages, conversations };
+}
+
+export async function markCommunityConversationRead(
+  userId: number,
+  conversationIdValue: unknown,
+  messageIdValue?: unknown
+) {
+  const conversationId = requiredText(conversationIdValue, "conversation_id", 100);
+  return sql.begin(async (tx) => {
+    await requireConversationMember(tx, conversationId, userId);
+    const requestedId = Math.max(Number(messageIdValue) || 0, 0);
+    const rows = await tx`
+      SELECT COALESCE(MAX(id), 0)::bigint AS last_id
+      FROM community_messages
+      WHERE conversation_id = ${conversationId}
+        AND deleted_at IS NULL
+        AND (${requestedId} = 0 OR id <= ${requestedId})
+    `;
+    const lastId = Number(rows[0]?.last_id ?? 0);
+    if (lastId) {
+      await tx`
+        UPDATE community_conversation_members
+        SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), ${lastId})
+        WHERE conversation_id = ${conversationId} AND user_id = ${userId}
+      `;
+    }
+    return { conversation_id: conversationId, last_read_message_id: lastId };
   });
 }
 

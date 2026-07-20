@@ -50,10 +50,7 @@ export async function crearSolicitudTransferencia(args: {
     ? result
     : {
         ...result,
-        requiresDestinationSelection: result.reason === "ambiguous",
-        error: result.reason === "not_found"
-          ? `No encontre ningun usuario llamado "${args.usuario_destino}".`
-          : "Encontre varios usuarios. Indica el correo electronico del usuario correcto."
+        requiresDestinationSelection: result.reason === "ambiguous_user"
       };
 }
 
@@ -121,7 +118,19 @@ export async function enviarSolicitudAmistad(args: { usuario_destino: string; me
   const userId = requireSession(usuarioId);
   if (!userId) return { ok: false as const, error: "Se requiere sesion." };
   const result = await sendFriendRequest({ senderUserId: userId, recipientQuery: args.usuario_destino, message: args.mensaje });
-  return result.ok ? result : { ...result, error: result.reason === "not_found" ? "No encontre al usuario." : "Necesito el correo exacto del usuario." };
+  if (result.ok) return result;
+  const errorByReason: Record<string, string> = {
+    not_found: `No encontre al usuario "${args.usuario_destino}".`,
+    ambiguous: "Hay varios usuarios con ese nombre. Indica el correo exacto.",
+    self_request: "No puedes enviarte una solicitud de amistad a ti mismo.",
+    already_friends: "Ese usuario ya esta en tus contactos.",
+    already_pending: "Ya existe una solicitud de amistad pendiente entre ambas cuentas."
+  };
+  return {
+    ...result,
+    requiresDestinationSelection: result.reason === "ambiguous",
+    error: errorByReason[result.reason] ?? "No se pudo enviar la solicitud de amistad."
+  };
 }
 
 export async function aceptarSolicitudAmistad(args: { solicitud_id: number }, usuarioId?: number | null) {
@@ -173,4 +182,3 @@ export async function listarConversaciones(_args: Record<string, never>, usuario
     requests: await listFriendRequests(userId)
   };
 }
-

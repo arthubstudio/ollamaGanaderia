@@ -13,7 +13,8 @@ export default defineEventHandler(async (event) => runApi(async () => {
     LIMIT 1
   `;
   if (!rows.length) {
-    return { lista: false, respuesta: "No encontre ese bovino en tu cuenta." };
+    const answer = "No encontre ese bovino en tu cuenta.";
+    return { lista: false, answer, respuesta: answer };
   }
 
   const bovino = rows[0];
@@ -29,9 +30,10 @@ export default defineEventHandler(async (event) => runApi(async () => {
     `
   ]);
 
-  return evaluateVentaReadiness({
+  const evaluation = evaluateVentaReadiness({
     nombre: String(bovino.nombre),
     peso: pesos[0]?.peso ?? null,
     vacunasAplicadas: vacunas.map((vacuna: any) => String(vacuna.nombre))
   });
+  return { ...evaluation, answer: evaluation.respuesta };
 }));

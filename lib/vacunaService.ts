@@ -1,4 +1,5 @@
 import { sql } from "~/lib/db";
+import { VACUNAS_OBLIGATORIAS_VENTA } from "~/lib/ventaReadiness.js";
 
 export function normalizeVacunaNombre(nombre: string) {
   return (nombre ?? "").trim();
@@ -98,5 +99,19 @@ export async function crearVacunaUsuario(
     }
 
     throw error;
+  }
+}
+
+export async function ensureRequiredSaleVaccines(usuarioId: number, client: any = sql) {
+  for (const nombre of VACUNAS_OBLIGATORIAS_VENTA) {
+    await client`
+      INSERT INTO vacunas (usuario_id, nombre, descripcion)
+      SELECT ${usuarioId}, ${nombre},
+             'Vacuna principal requerida para evaluar disponibilidad de venta.'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM vacunas
+        WHERE usuario_id = ${usuarioId} AND LOWER(nombre) = LOWER(${nombre})
+      )
+    `;
   }
 }

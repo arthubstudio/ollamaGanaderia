@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => runApi(async () => {
   const body = await readBody(event);
   const bovinoId = parseId(body?.bovino_id, "bovino_id");
   const result = await transferOwnership({
-    userId, bovinoId, duenoId: body?.dueno_id, ranchoId: body?.rancho_id,
+    userId, bovinoId, duenoId: body?.dueno_id, duenoIds: body?.dueno_ids, ranchoId: body?.rancho_id,
     fechaInicio: body?.fecha_inicio,
     observaciones: optionalText(body?.observaciones)
   });

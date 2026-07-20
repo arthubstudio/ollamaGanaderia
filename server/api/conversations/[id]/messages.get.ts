@@ -6,5 +6,5 @@ export default defineEventHandler(async (event) => runApi(async () => {
   const conversationId = requiredText(event.context.params?.id, "conversation_id", 100);
   const owner = await sql`SELECT id FROM conversations WHERE id = ${conversationId} AND usuario_id = ${userId} LIMIT 1`;
   if (!owner.length) apiError({ statusCode: 404, code: "NOT_FOUND", message: "Conversacion no encontrada." });
-  return sql`SELECT role, content, created_at FROM conversation_messages WHERE conversation_id = ${conversationId} ORDER BY id ASC LIMIT 100`;
+  return sql`SELECT id, role, content, created_at FROM conversation_messages WHERE conversation_id = ${conversationId} ORDER BY id ASC LIMIT 100`;
 }));

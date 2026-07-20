@@ -7,7 +7,7 @@ export default defineEventHandler((event) => runApi(async () => {
   return sendCommunityMessage({
     userId: requireUserId(event),
     conversationId: event.context.params?.id,
-    content: body?.content
+    content: body?.content,
+    clientMessageId: body?.client_message_id
   });
 }));
-

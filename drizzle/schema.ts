@@ -224,6 +224,11 @@ export const bovinos = pgTable(
       "usuario_id"
     ),
 
+    rancho_id: integer("rancho_id"),
+
+    created_by_user_id: integer("created_by_user_id")
+      .references(() => usuarios.id),
+
     breed_id: integer("breed_id")
       .references(() => breeds.id),
 
@@ -322,6 +327,20 @@ export const ranchos = pgTable(
 
   }
 );
+
+export const ranchoDuenos = pgTable("rancho_duenos", {
+  rancho_id: integer("rancho_id").notNull().references(() => ranchos.id),
+  dueno_id: integer("dueno_id").notNull().references(() => duenos.id),
+  created_by_user_id: integer("created_by_user_id").references(() => usuarios.id),
+  created_at: timestamp("created_at").notNull().defaultNow()
+}, (table) => [primaryKey({ columns: [table.rancho_id, table.dueno_id] })]);
+
+export const bovinoDuenos = pgTable("bovino_duenos", {
+  bovino_id: integer("bovino_id").notNull().references(() => bovinos.id),
+  dueno_id: integer("dueno_id").notNull().references(() => duenos.id),
+  created_by_user_id: integer("created_by_user_id").references(() => usuarios.id),
+  created_at: timestamp("created_at").notNull().defaultNow()
+}, (table) => [primaryKey({ columns: [table.bovino_id, table.dueno_id] })]);
 
 
 
@@ -422,7 +441,13 @@ export const vacunaAplicada =
 
       fecha_aplicacion: date(
         "fecha_aplicacion"
-      ),
+      ).notNull(),
+
+      proxima_fecha_permitida: date("proxima_fecha_permitida").notNull(),
+
+      aplicada_por_usuario_id: integer("aplicada_por_usuario_id")
+        .notNull()
+        .references(() => usuarios.id),
 
       veterinario: varchar(
         "veterinario",

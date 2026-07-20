@@ -5,6 +5,7 @@ definePageMeta({
 
 const route = useRoute();
 const vacaId = Number(route.params.id);
+const deleting = ref(false);
 
 const usuario = useState<any>("usuario", () => null);
 
@@ -95,37 +96,54 @@ const vacunaNombre = (id: number) => {
 };
 
 async function eliminarVaca() {
+  if (deleting.value) return;
   const ok = confirm("¿Eliminar este bovino?");
   if (!ok) return;
 
-  await $fetch(`/api/bovinos/${vacaId}`, {
-    method: "DELETE",
-    query: {
-      usuario_id: usuario.value?.id
-    }
-  });
+  deleting.value = true;
+  try {
+    await $fetch(`/api/bovinos/${vacaId}`, {
+      method: "DELETE",
+      query: {
+        usuario_id: usuario.value?.id
+      }
+    });
 
-  await navigateTo("/bovinos");
+    await navigateTo("/bovinos");
+  } finally {
+    deleting.value = false;
+  }
 }
 
 const pregunta = ref("");
 const respuesta = ref("");
+const askingIa = ref(false);
+const iaError = ref("");
 
 async function preguntarIA() {
-  const data = await $fetch("/api/ia/router", {
-    method: "POST",
-    body: {
-      pregunta: `
+  if (askingIa.value || !pregunta.value.trim()) return;
+  askingIa.value = true;
+  iaError.value = "";
+  try {
+    const data: any = await $fetch("/api/ia/router", {
+      method: "POST",
+      body: {
+        pregunta: `
 Información del bovino ${vaca.value?.nombre ?? ""}
 
 ${pregunta.value}
 `,
-      conversation_id: null,
-      usuario_id: usuario.value?.id
-    },
-  });
+        conversation_id: null,
+        usuario_id: usuario.value?.id
+      },
+    });
 
-  respuesta.value = data.respuesta;
+    respuesta.value = data.answer ?? data.respuesta ?? "El servidor de IA termino sin devolver una respuesta.";
+  } catch (error: any) {
+    iaError.value = error?.data?.data?.message ?? error?.data?.statusMessage ?? error?.message ?? "La consulta de IA fallo.";
+  } finally {
+    askingIa.value = false;
+  }
 }
 </script>
 
@@ -147,9 +165,10 @@ ${pregunta.value}
 
         <button
           @click="eliminarVaca"
-          class="bg-red-600 text-white px-6 py-3 rounded-2xl font-semibold"
+          :disabled="deleting"
+          class="bg-red-600 text-white px-6 py-3 rounded-2xl font-semibold disabled:opacity-50"
         >
-          Eliminar
+          {{ deleting ? "Eliminando..." : "Eliminar" }}
         </button>
       </div>
     </div>
@@ -283,10 +302,13 @@ ${pregunta.value}
 
       <button
         @click="preguntarIA"
-        class="mt-4 bg-black text-white px-6 py-4 rounded-2xl"
+        :disabled="askingIa || !pregunta.trim()"
+        class="mt-4 bg-black text-white px-6 py-4 rounded-2xl disabled:opacity-50"
       >
-        Preguntar IA
+        {{ askingIa ? "Pensando..." : "Preguntar IA" }}
       </button>
+
+      <p v-if="iaError" class="mt-4 text-sm text-red-600">{{ iaError }}</p>
 
       <div v-if="respuesta" class="mt-8 bg-gray-50 rounded-2xl p-6 whitespace-pre-line">
         {{ respuesta }}

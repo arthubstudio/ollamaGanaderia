@@ -17,17 +17,24 @@ const { data: ranchos } = await useFetch("/api/ranchos", {
 });
 
 const form = reactive({
-  dueno_id: null as number | null,
+  dueno_ids: [] as number[],
   rancho_id: null as number | null,
   fecha_inicio: "",
   observaciones: "",
 });
+const loading = ref(false);
+const errorMessage = ref("");
 
 async function guardar() {
 
-  await $fetch(
-    "/api/historial-propiedad",
-    {
+  if (loading.value) return;
+  errorMessage.value = "";
+  loading.value = true;
+
+  try {
+    await $fetch(
+      "/api/historial-propiedad",
+      {
       method: "POST",
 
       body: {
@@ -35,8 +42,8 @@ async function guardar() {
         bovino_id:
           vacaId,
 
-        dueno_id:
-          form.dueno_id,
+        dueno_ids:
+          form.dueno_ids,
 
         rancho_id:
           form.rancho_id,
@@ -51,10 +58,15 @@ async function guardar() {
           usuario.value?.id
 
       }
-    }
-  );
+      }
+    );
 
-  await navigateTo(`/bovinos/${vacaId}`);
+    await navigateTo(`/bovinos/${vacaId}`);
+  } catch (error: any) {
+    errorMessage.value = error?.data?.data?.message ?? error?.data?.statusMessage ?? "No se pudo actualizar la propiedad.";
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
@@ -63,12 +75,13 @@ async function guardar() {
     <h1 class="text-3xl font-bold mb-6">Transferir propiedad</h1>
 
     <div class="space-y-4 max-w-xl">
-      <select v-model="form.dueno_id" class="w-full border p-3 rounded-xl">
-        <option :value="null">Selecciona dueño</option>
-        <option v-for="d in duenos" :key="d.id" :value="d.id">
-          {{ d.nombre }}
-        </option>
-      </select>
+      <fieldset class="border p-3 rounded-xl space-y-2">
+        <legend class="px-1 text-sm font-semibold">Propietarios</legend>
+        <label v-for="d in duenos" :key="d.id" class="flex items-center gap-2">
+          <input v-model="form.dueno_ids" type="checkbox" :value="Number(d.id)">
+          <span>{{ d.nombre }}</span>
+        </label>
+      </fieldset>
 
       <select v-model="form.rancho_id" class="w-full border p-3 rounded-xl">
         <option :value="null">Selecciona rancho</option>
@@ -80,8 +93,10 @@ async function guardar() {
       <input v-model="form.fecha_inicio" type="date" class="w-full border p-3 rounded-xl" />
       <textarea v-model="form.observaciones" class="w-full border p-3 rounded-xl" placeholder="Observaciones" />
 
-      <button @click="guardar" class="bg-black text-white px-6 py-3 rounded-2xl">
-        Guardar
+      <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
+
+      <button @click="guardar" :disabled="loading" class="bg-black text-white px-6 py-3 rounded-2xl disabled:opacity-50">
+        {{ loading ? "Guardando..." : "Guardar" }}
       </button>
     </div>
   </div>

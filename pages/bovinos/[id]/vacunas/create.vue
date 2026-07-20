@@ -20,8 +20,12 @@ const form = reactive({
   veterinario: "",
   observaciones: ""
 });
+const loading = ref(false);
+const errorMessage = ref("");
 
 async function guardar() {
+  if (loading.value) return;
+  errorMessage.value = "";
   if (!usuario.value?.id) {
     alert("Debes iniciar sesión.");
     return;
@@ -33,6 +37,7 @@ async function guardar() {
   }
 
   try {
+    loading.value = true;
     await $fetch("/api/vacunas-aplicadas", {
       method: "POST",
       body: {
@@ -46,9 +51,13 @@ async function guardar() {
     });
 
     await navigateTo(`/bovinos/${vacaId}`);
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    alert("Error guardando vacuna");
+    errorMessage.value = error?.data?.data?.message ??
+      error?.data?.statusMessage ??
+      "No se pudo guardar la vacuna.";
+  } finally {
+    loading.value = false;
   }
 }
 </script>
@@ -105,11 +114,16 @@ async function guardar() {
         class="w-full border border-gray-200 rounded-2xl p-4"
       />
 
+      <p v-if="errorMessage" class="text-sm text-red-600">
+        {{ errorMessage }}
+      </p>
+
       <button
         @click="guardar"
-        class="bg-black text-white px-6 py-4 rounded-2xl"
+        :disabled="loading"
+        class="bg-black text-white px-6 py-4 rounded-2xl disabled:opacity-50"
       >
-        Guardar vacuna
+        {{ loading ? "Guardando..." : "Guardar vacuna" }}
       </button>
     </div>
   </div>

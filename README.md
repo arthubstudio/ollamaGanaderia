@@ -83,15 +83,17 @@ docker exec -it ollamaganaderia ollama pull llama3.2:latest
 docker exec -it ollamaganaderia ollama pull nomic-embed-text
 ```
 
-## Migracion Semana 7
+## Migraciones aditivas
 
-En una base existente, aplica la migracion aditiva antes de usar observabilidad avanzada o el seeder:
+En una base existente, aplica las migraciones en orden. Todas son aditivas y usan validaciones idempotentes:
 
 ```bash
 npm run db:migrate:week7
+npm run db:migrate:platform
+npm run db:migrate:improvements
 ```
 
-`npm run db:seed` tambien crea de forma segura las columnas e indices nuevos porque usa `IF NOT EXISTS`.
+En una base nueva, Docker Compose ejecuta `database/seeds.sql` y despues las migraciones montadas como scripts de inicializacion. En un volumen existente se deben ejecutar los comandos anteriores manualmente.
 
 ## Reranker local
 
@@ -142,6 +144,12 @@ Ejecutar las pruebas multiagente:
 
 ```bash
 npm run test:e2e:multi-agent
+```
+
+Ejecutar las pruebas de vacunacion, venta, relaciones, contexto y loading:
+
+```bash
+npm run test:e2e:improvements
 ```
 
 Ver reporte de Playwright:
@@ -295,7 +303,7 @@ La migracion aditiva de esta fase se aplica en bases existentes con:
 npm run db:migrate:platform
 ```
 
-En bases nuevas, Docker Compose monta la migracion despues de `database/seeds.sql` y la ejecuta automaticamente. No elimina tablas ni registros.
+En bases nuevas, Docker Compose monta las migraciones `004` y `005` despues de `database/seeds.sql` y las ejecuta automaticamente. No elimina tablas ni registros.
 
 Funcionalidades disponibles:
 
@@ -307,7 +315,7 @@ Funcionalidades disponibles:
 - `/bovinos/:id/historial`: bitacora permanente de transferencias del bovino.
 - `/observabilidad`: logs IA y auditoria operativa.
 
-La aceptacion de una transferencia se ejecuta dentro de una transaccion con bloqueo de filas. Cambia `bovinos.usuario_id` y mantiene pesos, enfermedades, historial, contextos y cualquier relacion ligada por `bovino_id`. Las vacunas aplicadas se enlazan al catalogo equivalente del receptor y las memorias que tengan `bovino_id` cambian de cuenta.
+La aceptacion de una transferencia se ejecuta dentro de una transaccion con bloqueo de filas. Cambia `bovinos.usuario_id`, actualiza el rancho activo y las relaciones de propietarios, y mantiene pesos, enfermedades, historial, contextos y cualquier relacion ligada por `bovino_id`. Las vacunas aplicadas se enlazan al catalogo equivalente del receptor y las memorias que tengan `bovino_id` cambian de cuenta.
 
 Si el arete ya existe en la cuenta receptora, se genera el siguiente arete atomico de esa cuenta y ambos valores quedan registrados en el historial de transferencia.
 
@@ -315,6 +323,7 @@ Si el arete ya existe en la cuenta receptora, se genera el siguiente arete atomi
 
 ```bash
 npm run test
+npm run test:e2e:improvements
 npm run test:e2e:platform -- --project=chromium
 npm run build
 ```
@@ -326,3 +335,11 @@ Documentacion detallada:
 ```text
 docs/plataforma-transferencias-comunidad.md
 ```
+
+## Reglas actuales de vacunacion y venta
+
+- La misma vacuna no puede repetirse para el mismo bovino antes de seis meses calendario.
+- Cada aplicacion conserva `fecha_aplicacion`, `proxima_fecha_permitida` y `aplicada_por_usuario_id`.
+- El historial de aplicaciones no se sobrescribe y la UI y la IA usan el mismo servicio transaccional.
+- Un bovino esta listo para venta con un ultimo peso de al menos `380 kg` y estas vacunas: Brucelosis, Rabia Paralitica Bovina y Carbon Sintomatico (Pierna Negra) y Edema Maligno.
+- Ranchos y bovinos admiten varios duenos mediante `rancho_duenos` y `bovino_duenos`; cada bovino conserva un solo `rancho_id` activo.

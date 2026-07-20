@@ -5,17 +5,22 @@ const form = reactive({
   nombre: "",
   breed_id: null as number | null,
   sexo: "",
-  fecha_nacimiento: ""
+  fecha_nacimiento: "",
+  rancho_id: null as number | null,
+  dueno_ids: [] as number[]
 });
 const breedSearch = ref("");
 const showBreedForm = ref(false);
 const newBreed = reactive({ nombre: "", tipo: "doble_proposito" });
 const loading = ref(false);
+const catalogLoading = ref(false);
 const errorMessage = ref("");
 
 const { data: breedData, refresh: refreshBreeds } = await useFetch("/api/breeds", {
   query: { active: true, limit: 100 }
 });
+const { data: ranchos } = await useFetch<any[]>("/api/ranchos");
+const { data: duenos } = await useFetch<any[]>("/api/duenos");
 
 const breeds = computed(() => breedData.value?.items ?? []);
 const filteredBreeds = computed(() => {
@@ -28,17 +33,34 @@ const filteredBreeds = computed(() => {
 });
 
 async function createBreed() {
-  if (!newBreed.nombre.trim()) return;
-  const result: any = await $fetch("/api/breeds", {
-    method: "POST",
-    body: newBreed
-  });
-  await refreshBreeds();
-  form.breed_id = Number(result.breed.id);
-  breedSearch.value = String(result.breed.nombre);
-  newBreed.nombre = "";
-  showBreedForm.value = false;
+  if (!newBreed.nombre.trim() || catalogLoading.value) return;
+  errorMessage.value = "";
+  try {
+    catalogLoading.value = true;
+    const result: any = await $fetch("/api/breeds", {
+      method: "POST",
+      body: newBreed
+    });
+    await refreshBreeds();
+    form.breed_id = Number(result.breed.id);
+    breedSearch.value = String(result.breed.nombre);
+    newBreed.nombre = "";
+    showBreedForm.value = false;
+  } catch (error: any) {
+    errorMessage.value = error?.data?.data?.message ?? "No se pudo crear la raza.";
+  } finally {
+    catalogLoading.value = false;
+  }
 }
+
+watch(() => form.rancho_id, (ranchoId) => {
+  if (!ranchoId) return;
+  const rancho = (ranchos.value ?? []).find((item: any) => Number(item.id) === Number(ranchoId));
+  const ownerIds = Array.isArray(rancho?.duenos)
+    ? rancho.duenos.map((item: any) => Number(item.id))
+    : [];
+  if (ownerIds.length) form.dueno_ids = ownerIds;
+});
 
 async function crearBovino() {
   errorMessage.value = "";
@@ -105,7 +127,9 @@ async function crearBovino() {
             <option value="doble_proposito">Doble proposito</option>
             <option value="otro">Otro</option>
           </select>
-          <button type="button" class="bg-emerald-700 text-white px-4 rounded-xl" @click="createBreed">Crear</button>
+          <button type="button" :disabled="catalogLoading" class="bg-emerald-700 text-white px-4 rounded-xl disabled:opacity-50" @click="createBreed">
+            {{ catalogLoading ? "Creando..." : "Crear" }}
+          </button>
         </div>
 
         <select v-model="form.sexo" class="w-full border border-gray-200 rounded-2xl p-4">
@@ -115,6 +139,24 @@ async function crearBovino() {
         </select>
 
         <input v-model="form.fecha_nacimiento" type="date" class="w-full border border-gray-200 rounded-2xl p-4" />
+
+        <label class="block">
+          <span class="text-sm font-semibold text-gray-700">Rancho activo</span>
+          <select v-model="form.rancho_id" class="mt-2 w-full border border-gray-200 rounded-2xl p-4">
+            <option :value="null">Sin rancho asignado</option>
+            <option v-for="rancho in ranchos ?? []" :key="rancho.id" :value="Number(rancho.id)">
+              {{ rancho.nombre }}
+            </option>
+          </select>
+        </label>
+
+        <fieldset v-if="(duenos ?? []).length" class="space-y-2">
+          <legend class="text-sm font-semibold text-gray-700 mb-2">Dueños relacionados</legend>
+          <label v-for="dueno in duenos ?? []" :key="dueno.id" class="flex items-center gap-3">
+            <input v-model="form.dueno_ids" type="checkbox" :value="Number(dueno.id)" />
+            <span>{{ dueno.nombre }}</span>
+          </label>
+        </fieldset>
         <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
 
         <button @click="crearBovino" :disabled="loading" class="bg-black text-white px-6 py-4 rounded-2xl disabled:opacity-50">

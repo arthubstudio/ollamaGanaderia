@@ -127,7 +127,7 @@ export async function runApi<T>(operation: () => Promise<T>) {
     apiError({
       statusCode: 500,
       code: "INTERNAL_ERROR",
-      message: "No se pudo completar la operacion."
+      message: "La operacion fallo por un error interno. Consulta el registro del servidor con el codigo INTERNAL_ERROR."
     });
   }
 }

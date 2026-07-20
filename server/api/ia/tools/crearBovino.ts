@@ -8,11 +8,22 @@ import {
 } from "~/lib/bovinoValidation";
 import { optionalDate } from "~/server/utils/api";
 import { findBreedByName } from "~/server/services/breedService";
+import {
+  getRanchoOwnerIds,
+  normalizeRelationIds,
+  requireOwnedActiveRancho,
+  requireOwnedRelationIds,
+  syncBovinoOwners,
+  syncRanchoOwners
+} from "~/server/services/ownershipRelations";
 
 export type CrearBovinoArgs = DatosBovinoRegistroInput & {
   breed_id?: number;
   fecha_nacimiento?: string;
   estado?: string;
+  rancho_id?: number;
+  dueno_id?: number;
+  dueno_ids?: number[];
 };
 
 export async function crearBovino(args: CrearBovinoArgs, usuarioId?: number | null) {
@@ -54,18 +65,59 @@ export async function crearBovino(args: CrearBovinoArgs, usuarioId?: number | nu
 
   try {
     const bovino = await sql.begin(async (tx) => {
+      const ranchoId = args.rancho_id ? Number(args.rancho_id) : null;
+      if (ranchoId && (!Number.isInteger(ranchoId) || ranchoId <= 0)) {
+        return { relationError: "El rancho seleccionado no es valido." } as const;
+      }
+      await requireOwnedActiveRancho(tx, usuarioId, ranchoId);
+      const explicitOwnerIds = normalizeRelationIds(args.dueno_ids, args.dueno_id);
+      await requireOwnedRelationIds(tx, usuarioId, explicitOwnerIds);
+      const ranchoOwnerIds = await getRanchoOwnerIds(tx, ranchoId);
+      const ownerIds = explicitOwnerIds.length ? explicitOwnerIds : ranchoOwnerIds;
+
+      if (ranchoId && explicitOwnerIds.length) {
+        const combinedRanchoOwners = [...new Set([...ranchoOwnerIds, ...explicitOwnerIds])];
+        await syncRanchoOwners({
+          client: tx,
+          userId: usuarioId,
+          ranchoId,
+          duenoIds: combinedRanchoOwners
+        });
+      }
+
       const numeroArete = await generarSiguienteArete(tx, usuarioId);
       const rows = await tx`
         INSERT INTO bovinos
-          (usuario_id, numero_arete, nombre, raza, breed_id, sexo, fecha_nacimiento, estado)
+          (usuario_id, created_by_user_id, rancho_id, numero_arete,
+           nombre, raza, breed_id, sexo, fecha_nacimiento, estado)
         VALUES
-          (${usuarioId}, ${numeroArete}, ${validacion.datos.nombre},
+          (${usuarioId}, ${usuarioId}, ${ranchoId}, ${numeroArete}, ${validacion.datos.nombre},
            ${validacion.datos.raza}, ${breed.id}, ${validacion.datos.sexo},
            ${optionalDate(args.fecha_nacimiento, "La fecha de nacimiento")}, ${estado})
         RETURNING *
       `;
-      return rows[0];
+      const created = rows[0];
+      await tx`
+        INSERT INTO historial_propiedad (
+          bovino_id, dueno_id, rancho_id, propietario_usuario_id,
+          fecha_inicio, observaciones
+        ) VALUES (
+          ${created.id}, ${ownerIds[0] ?? null}, ${ranchoId}, ${usuarioId}, CURRENT_DATE,
+          'Propietario asignado automaticamente al registrar el bovino.'
+        )
+      `;
+      await syncBovinoOwners({
+        client: tx,
+        userId: usuarioId,
+        bovinoId: Number(created.id),
+        duenoIds: ownerIds
+      });
+      return { ...created, dueno_ids: ownerIds };
     });
+
+    if ("relationError" in bovino) {
+      return { ok: false as const, error: bovino.relationError };
+    }
 
     await rebuildBovinoContext(Number(bovino.id));
     return { ok: true as const, bovino };

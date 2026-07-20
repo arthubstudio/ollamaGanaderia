@@ -3,6 +3,8 @@ definePageMeta({
   middleware: ["auth"]
 })
 const search = ref("")
+const deletingId = ref<number | null>(null)
+const errorMessage = ref("")
 const usuario =
   useState<any>(
     "usuario"
@@ -30,8 +32,17 @@ const filtered = computed(() => {
 })
 
 async function eliminarDueno(id: number) {
-  await $fetch(`/api/duenos/${id}`, { method: "DELETE" })
-  await refresh()
+  if (deletingId.value !== null) return
+  deletingId.value = id
+  errorMessage.value = ""
+  try {
+    await $fetch(`/api/duenos/${id}`, { method: "DELETE" })
+    await refresh()
+  } catch (error: any) {
+    errorMessage.value = error?.data?.data?.message ?? error?.data?.statusMessage ?? "No se pudo eliminar el dueno."
+  } finally {
+    deletingId.value = null
+  }
 }
 </script>
 
@@ -54,6 +65,8 @@ async function eliminarDueno(id: number) {
       placeholder="Buscar dueño..."
       class="w-full bg-white border border-gray-200 rounded-2xl p-4 outline-none mb-6"
     />
+
+    <p v-if="errorMessage" class="mb-4 text-sm text-red-600">{{ errorMessage }}</p>
 
     <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
       <table class="w-full">
@@ -90,9 +103,10 @@ async function eliminarDueno(id: number) {
 
                 <button
                   @click="eliminarDueno(dueno.id)"
-                  class="px-3 py-2 rounded-xl text-sm bg-red-600 text-white"
+                  :disabled="deletingId !== null"
+                  class="px-3 py-2 rounded-xl text-sm bg-red-600 text-white disabled:opacity-50"
                 >
-                  Eliminar
+                  {{ deletingId === Number(dueno.id) ? "Eliminando..." : "Eliminar" }}
                 </button>
 
               </div>

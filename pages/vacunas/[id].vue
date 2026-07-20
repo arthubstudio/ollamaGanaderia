@@ -16,6 +16,7 @@ const form = reactive({
 });
 
 const errorMsg = ref("");
+const activeAction = ref<"save" | "delete" | null>(null);
 
 function extraerMensajeError(error: unknown) {
   const e = error as {
@@ -48,6 +49,10 @@ watchEffect(() => {
 
 async function guardar() {
 
+  if (activeAction.value) return;
+  errorMsg.value = "";
+  activeAction.value = "save";
+
   try {
 
     await $fetch(
@@ -72,11 +77,17 @@ async function guardar() {
 
     errorMsg.value = extraerMensajeError(error);
 
+  } finally {
+
+    activeAction.value = null;
+
   }
 
 }
 
 async function eliminar() {
+
+  if (activeAction.value) return;
 
   const ok =
     confirm(
@@ -85,6 +96,8 @@ async function eliminar() {
 
   if (!ok)
     return;
+
+  activeAction.value = "delete";
 
   try {
 
@@ -105,9 +118,11 @@ async function eliminar() {
 
     console.error(error);
 
-    alert(
-      "Error eliminando vacuna"
-    );
+    errorMsg.value = extraerMensajeError(error);
+
+  } finally {
+
+    activeAction.value = null;
 
   }
 
@@ -143,9 +158,10 @@ async function eliminar() {
 
       <button
         @click="eliminar"
-        class="bg-red-600 text-white px-5 py-3 rounded-2xl"
+        :disabled="Boolean(activeAction)"
+        class="bg-red-600 text-white px-5 py-3 rounded-2xl disabled:opacity-50"
       >
-        Eliminar
+        {{ activeAction === "delete" ? "Eliminando..." : "Eliminar" }}
       </button>
 
     </div>
@@ -203,15 +219,18 @@ async function eliminar() {
 
         @click="guardar"
 
+        :disabled="Boolean(activeAction)"
+
         class="
           bg-black
           text-white
           px-6
           py-4
           rounded-2xl
+          disabled:opacity-50
         "
       >
-        Guardar cambios
+        {{ activeAction === "save" ? "Guardando..." : "Guardar cambios" }}
       </button>
 
     </div>

@@ -121,6 +121,8 @@ app/
     notifications.ts         Bandeja y estado de lectura
     userDirectory.ts         Busqueda priorizada de usuarios
     activityAudit.ts         Auditoria operativa
+    vaccination.ts           Regla transaccional de vacunacion cada seis meses
+    ownershipRelations.ts    Relaciones activas rancho-duenos y bovino-duenos
 
   lib/                       Logica compartida
     db.ts                    Conexion Drizzle/PostgreSQL
@@ -132,6 +134,8 @@ app/
     iaWriteActionRouter.ts   Inferencia de acciones de escritura
     iaActionPlanner.js       Planner determinista de intenciones, parametros y datos faltantes
     iaConversationState.js   Estado temporal de acciones pendientes por conversacion
+    vaccinationInterval.js   Calculo puro del intervalo semestral
+    ventaReadiness.js        Regla unica para determinar aptitud de venta
     conversationContext.ts   Contexto conversacional
 
   drizzle/
@@ -145,6 +149,7 @@ app/
 
   e2e/
     ia.spec.ts               Prueba E2E del asistente IA
+    ia.improvements.spec.ts  Reglas de vacunacion, venta, relaciones, contexto y loading
 ```
 
 ## Flujo principal
@@ -215,6 +220,8 @@ Tablas principales:
 - `duenos`: propietarios.
 - `ranchos`: ranchos o ubicaciones.
 - `historial_propiedad`: relacion historica entre bovino, dueno y rancho.
+- `rancho_duenos`: relacion muchos a muchos entre ranchos y duenos administrados por la cuenta.
+- `bovino_duenos`: relacion muchos a muchos entre bovinos y duenos; el bovino conserva un solo `rancho_id` activo.
 - `vacunas`: catalogo de vacunas por usuario.
 - `vacuna_aplicada`: vacunas aplicadas a bovinos.
 - `pesos`: historial de pesos.
@@ -296,7 +303,9 @@ npm run generate
 npm run preview
 npm run postinstall
 npm run db:migrate:platform
+npm run db:migrate:improvements
 npm run test:e2e:platform
+npm run test:e2e:improvements
 ```
 
 ## Convenciones importantes
@@ -323,7 +332,8 @@ npm run test:e2e:platform
 - El planner determinista se ejecuta antes de la busqueda por bovino para evitar falsos positivos como interpretar `tengo` o `registrados` como nombres.
 - Las acciones incompletas no deben llamar al LLM ni a la base de datos: deben crear una accion pendiente y pedir solo los campos faltantes.
 - Las acciones sensibles, como eliminar o transferir propiedad, requieren confirmacion antes de ejecutarse.
-- El estado pendiente se guarda en memoria del servidor; si se reinicia Nuxt, se pierde.
+- Cada accion pendiente guarda tool, parametros, faltantes, fecha y estado; expira despues de 15 minutos y se cancela al detectar un cambio de intencion.
+- Un `si` aislado solo confirma una accion pendiente vigente; nunca reutiliza datos de un proceso cancelado o expirado.
 - Las confirmaciones y consultas de memoria deben hablarle al usuario en segunda persona: `soy` se confirma como `eres`, `me llamo` como `te llamas`, `mi` como `tu`.
 - El modelo no debe inventar informacion: el prompt del RAG exige usar memorias, contexto ganadero e historial.
 - Los agentes no se llaman entre si ni vuelven a invocar al router; el orquestador es el unico punto de seleccion.
@@ -334,10 +344,14 @@ npm run test:e2e:platform
 - El seeder de estres usa operaciones set-based dentro de una transaccion y lotes idempotentes en `stress_seed_batches`.
 - Los contextos del seeder no tienen embedding por defecto; `--real-embeddings=N` genera solo un subconjunto real y declarado.
 - La evaluacion usa `/api/ia/evaluate`, un juez Ollama local y genera JSON, Markdown y PDF con resultados reales.
-- Un bovino esta listo para venta solo si su ultimo peso registrado es de al menos 550 kg y tiene aplicadas Brucelosis, Clostridiales, Complejo Respiratorio y Rabia. La evaluacion usa exclusivamente datos del usuario autenticado.
+- Un bovino esta listo para venta solo si su ultimo peso registrado es de al menos 380 kg y tiene aplicadas Brucelosis, Rabia Paralitica Bovina y Carbon Sintomatico (Pierna Negra) y Edema Maligno. La evaluacion muestra peso, vacunas cumplidas y vacunas faltantes usando exclusivamente datos del usuario autenticado.
+- Las tres vacunas obligatorias de venta se crean para usuarios nuevos y la migracion `005` las agrega de forma idempotente a cuentas existentes.
+- Una misma pareja `bovino_id`/`vacuna_id` solo admite otra aplicacion al cumplir seis meses calendario. Cada registro conserva fecha, proxima fecha permitida y usuario aplicador; la regla compartida se usa desde la UI y desde IA.
+- Los pesos siempre se agregan al historial; registrar uno nuevo mediante IA no sobrescribe el registro anterior.
+- Un rancho puede tener varios duenos y un bovino varios duenos mediante tablas puente. `bovinos.rancho_id` representa el unico rancho activo y `created_by_user_id` registra al creador.
 - Las transferencias entre cuentas se crean como `PENDING`; el remitente conserva la propiedad hasta que el receptor acepte.
 - Solo el receptor puede aceptar o rechazar; solo el remitente puede cancelar. Los estados finales son `ACCEPTED`, `REJECTED`, `CANCELLED` o `EXPIRED`.
-- La aceptacion bloquea la transferencia y el bovino dentro de una sola transaccion. Las relaciones por `bovino_id` no se copian ni eliminan, por lo que conservan su identidad e historial.
+- La aceptacion bloquea la transferencia y el bovino dentro de una sola transaccion. Actualiza el rancho activo y los duenos del bovino con los del rancho receptor, cierra la propiedad anterior y conserva pesos, vacunas, enfermedades e historial por `bovino_id`.
 - Si el arete colisiona en la cuenta receptora, se genera otro mediante `bovino_arete_sequences` y el cambio queda auditado.
 - `bovinos.raza` se conserva por compatibilidad, pero altas y ediciones tambien requieren `breed_id` del catalogo.
 - Las razas globales pueden ser administradas por usuarios con rol `admin`; una raza personalizada tambien puede editarla su creador.
@@ -355,8 +369,7 @@ npm run test:e2e:platform
 - `database/schema.sql`, `database/seeds.sql` y `drizzle/schema.ts` no estan completamente sincronizados.
 - `memories` ya declara `slot`, `tipo` y `updated_at` en Drizzle, aunque los tres esquemas aun deben mantenerse sincronizados manualmente.
 - Hay problemas de encoding en textos con acentos, por ejemplo `GanaderÃ­a` y `DueÃ±os`.
-- El README menciona Nuxt 3, pero el proyecto usa Nuxt 4 en `package.json`.
-- La suite unitaria cubre extraccion, datos faltantes, confirmaciones, consultas y contexto; la seguridad de endpoints tambien se verifico con dos sesiones reales, pero falta automatizar esa prueba de integracion en CI.
+- La suite unitaria cubre extraccion, datos faltantes, confirmaciones, consultas, contexto, venta e intervalo de vacunas. `e2e/ia.improvements.spec.ts` automatiza las relaciones multiples y reglas integradas, pero aun falta ejecutarla desde CI.
 - La carpeta `node_modules`, `.nuxt`, `playwright-report` y `test-results` existen localmente; conviene no tratarlas como fuente principal.
 - Hay deuda terminologica por la migracion de `vacas` a `bovinos`.
 - El estado multi-turno de acciones pendientes es temporal en memoria; no sobrevive reinicios ni multiples instancias del servidor.

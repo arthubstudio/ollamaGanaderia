@@ -1,12 +1,8 @@
-import postgres from "postgres";
+import { sql } from "~/lib/db";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 import { crearVacunaUsuario } from "~/lib/vacunaService";
 import { findBovinoByNombre } from "./findBovino";
-
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  { prepare: false }
-);
+import { applyVaccineToBovino } from "~/server/services/vaccination";
 
 export type AplicarVacunaArgs = {
   nombre_vaca: string;
@@ -84,31 +80,22 @@ export async function aplicarVacuna(
   }
   const fecha = args.fecha_aplicacion?.trim() || todayIsoDate();
 
-  const rows = await sql`
-    INSERT INTO vacuna_aplicada (
-      bovino_id,
-      vacuna_id,
-      fecha_aplicacion,
-      veterinario,
-      observaciones
-    )
-    VALUES (
-      ${vaca.id},
-      ${vacuna.id},
-      ${fecha},
-      ${args.veterinario?.trim() ?? null},
-      ${args.observaciones?.trim() ?? null}
-    )
-    RETURNING *
-  `;
+  const result = await applyVaccineToBovino({
+    userId: usuarioId,
+    bovinoId: Number(vaca.id),
+    vacunaId: vacuna.id,
+    fechaAplicacion: fecha,
+    veterinario: args.veterinario,
+    observaciones: args.observaciones
+  });
 
   await rebuildBovinoContext(vaca.id);
 
   return {
     ok: true as const,
-    aplicacion: rows[0],
-    bovino: vaca,
-    vacuna,
+    aplicacion: result.aplicacion,
+    bovino: result.bovino,
+    vacuna: result.vacuna,
     vacunaCreada,
     labelBovino: labelBovino(vaca)
   };

@@ -1,5 +1,6 @@
 import { ollama } from "~/lib/ollama";
 import { buildHistorialMessages } from "~/lib/conversationContext";
+import { withIaAnswer } from "~/lib/iaResponse";
 
 import { getPeso } from "./tools/getPeso";
 import { getEstado } from "./tools/getEstado";
@@ -13,9 +14,8 @@ import { crearBovino } from "./tools/crearBovino";
 import { crearVacuna } from "./tools/crearVacuna";
 import { aplicarVacuna } from "./tools/aplicarVacuna";
 import { registrarPeso } from "./tools/registrarPeso";
+import { registrarVenta } from "./tools/registrarVenta";
 import { registrarEnfermedad } from "./tools/registrarEnfermedad";
-import { transferirPropiedad } from "./tools/transferirPropiedad";
-import { crearDueno } from "./tools/crearDueno";
 import { crearRancho } from "./tools/crearRancho";
 import { eliminarBovino } from "./tools/eliminarBovino";
 import { eliminarEnfermedad } from "./tools/eliminarEnfermedad";
@@ -51,6 +51,8 @@ import {
 
 type AnyObject = Record<string, any>;
 
+const DISALLOWED_IA_TOOLS = new Set(["crearDueno", "transferirPropiedad"]);
+
 const PLATFORM_TOOL_SCHEMAS = [
   {
     type: "function",
@@ -64,7 +66,7 @@ const PLATFORM_TOOL_SCHEMAS = [
     type: "function",
     function: {
       name: "crearSolicitudTransferencia",
-      description: "Solicita transferir un bovino a otra cuenta. No cambia la propiedad hasta que el receptor acepte.",
+      description: "Unica herramienta para transferir, enviar, mandar, pasar o traspasar un bovino a otra cuenta. Crea una solicitud y no cambia la propiedad hasta que el receptor acepte.",
       parameters: {
         type: "object",
         properties: {
@@ -181,6 +183,26 @@ function safeJsonParse(value: unknown): AnyObject {
   return {};
 }
 
+function describeToolError(error: any, tool: string, argumentos: AnyObject) {
+  const code = String(error?.data?.code ?? error?.code ?? "TOOL_EXECUTION_ERROR");
+  const publicMessage = String(
+    error?.data?.message ??
+    error?.statusMessage ??
+    error?.message ??
+    `La herramienta ${tool} fallo sin devolver un detalle de validacion.`
+  );
+  const details = {
+    tool,
+    code,
+    status_code: Number(error?.statusCode ?? 500),
+    public_message: publicMessage,
+    technical_message: String(error?.message ?? error),
+    argumentos
+  };
+  console.error("Fallo al ejecutar herramienta de IA", details);
+  return { code, publicMessage, details };
+}
+
 function firstTextValue(source: AnyObject, keys: string[]) {
   for (const key of keys) {
     const value = source[key];
@@ -213,7 +235,6 @@ function normalizeToolArguments(
     [
       "aplicarVacuna",
       "registrarEnfermedad",
-      "transferirPropiedad",
       "eliminarVacunaAplicada",
       "eliminarEnfermedad",
       "quitarPropiedad"
@@ -223,7 +244,7 @@ function normalizeToolArguments(
     normalized.nombre_vaca = bovinoName || nombreAnimalContexto || "";
   }
 
-  if (toolName === "registrarPeso" && !normalized.nombre) {
+  if (["registrarPeso", "registrarVenta"].includes(toolName) && !normalized.nombre) {
     normalized.nombre =
       bovinoName ||
       firstTextValue(normalized, ["nombre"]) ||
@@ -477,41 +498,6 @@ Estado: ${resultado.estado ?? "N/D"}`.trim();
       return `Enfermedad "${resultado.registro.nombre}" registrada para ${resultado.bovino.nombre} (${tipo}).`;
     }
 
-    case "transferirPropiedad": {
-      if (!resultado?.ok) {
-        return resultado?.error ?? "No pude transferir la propiedad.";
-      }
-
-      const partes: string[] = [];
-      if (resultado.duenoCreado && resultado.dueno) {
-        partes.push(`Dueño "${resultado.dueno.nombre}" creado`);
-      }
-      if (resultado.ranchoCreado && resultado.rancho) {
-        partes.push(`Rancho "${resultado.rancho.nombre}" creado`);
-      }
-
-      const detalle = partes.length
-        ? `${partes.join(" y ")} y asignado a ${resultado.bovino.nombre}.`
-        : `Propiedad de ${resultado.bovino.nombre} actualizada correctamente.`;
-
-      const duenoTxt = resultado.dueno?.nombre
-        ? `Dueño: ${resultado.dueno.nombre}.`
-        : "";
-      const ranchoTxt = resultado.rancho?.nombre
-        ? `Rancho: ${resultado.rancho.nombre}.`
-        : "";
-
-      return `${detalle} ${duenoTxt} ${ranchoTxt}`.trim();
-    }
-
-    case "crearDueno": {
-      if (!resultado?.ok) return resultado?.error ?? "No pude crear el dueño.";
-      if (resultado.creado) {
-        return `Dueño "${resultado.dueno.nombre}" creado correctamente en tu catálogo.`;
-      }
-      return `El dueño "${resultado.dueno.nombre}" ya existía en tu catálogo.`;
-    }
-
     case "crearRancho": {
       if (!resultado?.ok) return resultado?.error ?? "No pude crear el rancho.";
       if (resultado.creado) {
@@ -574,15 +560,20 @@ Estado: ${resultado.estado ?? "N/D"}`.trim();
       return `Usuarios encontrados:\n${resultado.matches.map((item: any) => `- ${item.nombre} (${item.email})`).join("\n")}`;
     }
 
+    case "registrarVenta": {
+      if (!resultado?.ok) return resultado?.error ?? "No pude registrar la venta.";
+      return `Venta registrada. ${resultado.bovino.nombre} fue vendido a ${resultado.venta.comprador} por $${resultado.venta.precio}.`;
+    }
+
     case "crearSolicitudTransferencia": {
       if (!resultado?.ok) {
         const matches = resultado?.matches ?? [];
-        if (resultado?.reason === "ambiguous" && matches.length) {
+        if (resultado?.reason === "ambiguous_user" && matches.length) {
           return `Encontre ${matches.length} usuarios relacionados:\n${matches.map((item: any) => `- ${item.nombre} (${item.email})`).join("\n")}\nIndica el correo electronico del usuario correcto.`;
         }
         return resultado?.error ?? "No pude crear la solicitud de transferencia.";
       }
-      return `La transferencia de ${resultado.transfer.bovino.nombre} fue enviada a ${resultado.transfer.destination.nombre} (${resultado.transfer.destination.email}). El bovino seguira en tu cuenta hasta que sea aceptada.`;
+      return `Solicitud de transferencia enviada. ${resultado.transfer.bovino.nombre} se transferira a ${resultado.transfer.destination.nombre} (${resultado.transfer.destination.email}) cuando el usuario acepte.`;
     }
 
     case "aceptarTransferencia":
@@ -675,7 +666,7 @@ function buildToolSchemas() {
     required: ["nombre"]
   } as const;
 
-  return [
+  const schemas = [
     {
       type: "function",
       function: {
@@ -751,6 +742,8 @@ function buildToolSchemas() {
             nombre: { type: "string", description: "Nombre corto del bovino, máx. 5 palabras" },
             raza: { type: "string", description: "Raza del bovino, ej. Holstein, Angus" },
             sexo: { type: "string", description: "Solo Hembra (vaca) o Macho (toro)" },
+            rancho_id: { type: "number", description: "ID del rancho activo (opcional)" },
+            dueno_ids: { type: "array", items: { type: "number" }, description: "IDs de dueños administrados por la cuenta (opcional)" },
             fecha_nacimiento: { type: "string", description: "Fecha YYYY-MM-DD (opcional)" },
             estado: { type: "string", description: "activa, vendida, etc. (opcional)" }
           },
@@ -810,6 +803,24 @@ function buildToolSchemas() {
     {
       type: "function",
       function: {
+        name: "registrarVenta",
+        description: "Registra la venta de un bovino del usuario autenticado.",
+        parameters: {
+          type: "object",
+          properties: {
+            nombre: { type: "string", description: "Nombre del bovino" },
+            comprador: { type: "string", description: "Nombre del comprador" },
+            precio: { type: "number", description: "Precio de venta" },
+            fecha: { type: "string", description: "Fecha YYYY-MM-DD (opcional)" },
+            observaciones: { type: "string", description: "Observaciones (opcional)" }
+          },
+          required: ["nombre", "comprador", "precio"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
         name: "registrarEnfermedad",
         description: "Registra o aplica una enfermedad a un bovino. Si el usuario dice 'aplicar enfermedad', usa esta herramienta (NO aplicarVacuna).",
         parameters: {
@@ -825,26 +836,10 @@ function buildToolSchemas() {
         }
       }
     },
-    {
-      type: "function",
-      function: {
-        name: "transferirPropiedad",
-        description: "Transfiere la propiedad de un bovino a un dueño y/o rancho. Si el dueño o rancho no existen, se crean automáticamente.",
-        parameters: {
-          type: "object",
-          properties: {
-            nombre_vaca: { type: "string", description: "Nombre del bovino (vaca o toro)" },
-            dueno_nombre: { type: "string", description: "Nombre del dueño (opcional si hay rancho)" },
-            rancho_nombre: { type: "string", description: "Nombre del rancho (opcional si hay dueño)" },
-            fecha_inicio: { type: "string", description: "Fecha YYYY-MM-DD (opcional, hoy por defecto)" },
-            observaciones: { type: "string", description: "Observaciones (opcional)" }
-          },
-          required: ["nombre_vaca"]
-        }
-      }
-    },
     ...PLATFORM_TOOL_SCHEMAS
   ] as const;
+
+  return schemas.filter((schema) => !DISALLOWED_IA_TOOLS.has(schema.function.name));
 }
 
 async function executeToolCall(
@@ -853,6 +848,13 @@ async function executeToolCall(
   usuarioId: number | null,
   nombreAnimalContexto: string | null
 ) {
+  if (DISALLOWED_IA_TOOLS.has(toolName)) {
+    return {
+      ok: false,
+      error: "La IA no puede crear duenos ni cambiar propietarios directamente. Usa una solicitud de transferencia a otro usuario."
+    };
+  }
+
   argumentos = normalizeToolArguments(
     toolName,
     argumentos,
@@ -894,7 +896,9 @@ async function executeToolCall(
           fecha_nacimiento: argumentos.fecha_nacimiento
             ? String(argumentos.fecha_nacimiento)
             : undefined,
-          estado: argumentos.estado ? String(argumentos.estado) : undefined
+          estado: argumentos.estado ? String(argumentos.estado) : undefined,
+          rancho_id: argumentos.rancho_id ? Number(argumentos.rancho_id) : undefined,
+          dueno_ids: Array.isArray(argumentos.dueno_ids) ? argumentos.dueno_ids.map(Number) : undefined
         },
         usuarioId
       );
@@ -937,16 +941,6 @@ async function executeToolCall(
 
       return resultado;
     }
-
-    case "crearDueno":
-      return crearDueno(
-        {
-          nombre: String(argumentos.nombre ?? ""),
-          telefono: argumentos.telefono ? String(argumentos.telefono) : undefined,
-          direccion: argumentos.direccion ? String(argumentos.direccion) : undefined
-        },
-        usuarioId
-      );
 
     case "crearRancho":
       return crearRancho(
@@ -1069,6 +1063,15 @@ async function executeToolCall(
         usuarioId
       );
 
+    case "registrarVenta":
+      return registrarVenta({
+        nombre: String(argumentos.nombre ?? nombreAnimalContexto ?? ""),
+        comprador: String(argumentos.comprador ?? ""),
+        precio: Number(argumentos.precio),
+        fecha: argumentos.fecha ? String(argumentos.fecha) : undefined,
+        observaciones: argumentos.observaciones ? String(argumentos.observaciones) : undefined
+      }, usuarioId);
+
     case "registrarEnfermedad": {
       const nombreBovinoEnf =
         String(argumentos.nombre_vaca ?? argumentos.nombre ?? "").trim() ||
@@ -1085,32 +1088,6 @@ async function executeToolCall(
           fecha: argumentos.fecha ? String(argumentos.fecha) : undefined,
           veterinario: argumentos.veterinario
             ? String(argumentos.veterinario)
-            : undefined
-        },
-        usuarioId
-      );
-    }
-
-    case "transferirPropiedad": {
-      const nombreBovinoTrans =
-        String(argumentos.nombre_vaca ?? "").trim() ||
-        nombreAnimalContexto ||
-        "";
-
-      return transferirPropiedad(
-        {
-          nombre_vaca: nombreBovinoTrans,
-          dueno_nombre: argumentos.dueno_nombre
-            ? String(argumentos.dueno_nombre)
-            : undefined,
-          rancho_nombre: argumentos.rancho_nombre
-            ? String(argumentos.rancho_nombre)
-            : undefined,
-          fecha_inicio: argumentos.fecha_inicio
-            ? String(argumentos.fecha_inicio)
-            : undefined,
-          observaciones: argumentos.observaciones
-            ? String(argumentos.observaciones)
             : undefined
         },
         usuarioId
@@ -1209,7 +1186,7 @@ async function executeToolCall(
   }
 }
 
-export default defineEventHandler(async (event) => {
+async function handleFunctionCalling(event: any) {
   const body = await readBody(event);
 
   const pregunta = String(body?.pregunta ?? "").trim();
@@ -1259,18 +1236,15 @@ export default defineEventHandler(async (event) => {
         respuesta: buildRespuesta(directTool, argumentos, resultado)
       };
     } catch (error: any) {
-      console.error("Error ejecutando herramienta directa de IA:", {
-        tool: directTool,
-        argumentos,
-        error
-      });
+      const failure = describeToolError(error, directTool, argumentos);
 
       return {
         encontrado: true,
         tool: directTool,
         argumentos,
         resultado: null,
-        respuesta: "No pude completar la accion por un problema interno. Revisa los datos e intenta de nuevo."
+        respuesta: failure.publicMessage,
+        error: failure.details
       };
     }
   }
@@ -1303,13 +1277,14 @@ export default defineEventHandler(async (event) => {
         respuesta
       };
     } catch (error: any) {
+      const failure = describeToolError(error, inferredAction.tool, inferredAction.args);
       return {
         encontrado: true,
         tool: inferredAction.tool,
         argumentos: inferredAction.args,
         resultado: null,
-        respuesta: "Ocurrió un error al ejecutar la herramienta.",
-        error: String(error?.message ?? error)
+        respuesta: failure.publicMessage,
+        error: failure.details
       };
     }
   }
@@ -1335,12 +1310,11 @@ CONSULTAS (cuando el usuario PREGUNTA, no cuando pide crear/aplicar):
 - Si el usuario pregunta, NUNCA crees ni modifiques registros.
 
 ACCIONES DE CREACIÓN EN CATÁLOGO (sin asignar a bovino):
-- crearDueno: solo crear dueño en catálogo
 - crearRancho: solo crear rancho en catálogo
 - crearVacuna: solo agregar vacuna al catálogo
 
 ACCIONES CON ASIGNACIÓN A BOVINO:
-- aplicarVacuna, registrarEnfermedad, transferirPropiedad
+- aplicarVacuna y registrarEnfermedad
 - Solo usa estas si el usuario pide explícitamente aplicar, asignar o transferir a un bovino.
 
 ACCIONES CRUD:
@@ -1348,11 +1322,13 @@ ACCIONES CRUD:
 - registrarEnfermedad, actualizarEnfermedad, eliminarEnfermedad
 - aplicarVacuna, eliminarVacunaAplicada, eliminarVacuna
 - eliminarDueno, eliminarRancho, quitarPropiedad
-- registrarPeso
+- registrarPeso, registrarVenta
 
 TRANSFERENCIAS ENTRE CUENTAS:
-- Si el usuario dice enviar, mandar o transferir un bovino a otro usuario, usa crearSolicitudTransferencia.
-- transferirPropiedad solo cambia dueno o rancho dentro de la misma cuenta.
+- Si el usuario dice transferir, enviar, mandar, pasar o traspasar un bovino, usa unicamente crearSolicitudTransferencia.
+- Busca al receptor por nombre de usuario o correo. Si hay ambiguedad, pide el correo exacto; si no existe, informa el error.
+- Nunca crees un dueno para resolver una transferencia y nunca uses transferirPropiedad.
+- El bovino conserva al propietario actual hasta que el receptor acepte la solicitud.
 - Nunca aceptes, rechaces o canceles una transferencia sin su ID y sin la sesion autorizada.
 
 RAZAS Y COMUNIDAD:
@@ -1365,7 +1341,7 @@ Reglas para vacunas vs enfermedades vs consultas (MUY IMPORTANTE):
 - PREGUNTA sobre vacunas → getVacunas. ACCIÓN sobre vacunas → aplicarVacuna o crearVacuna.
 - Si el usuario menciona ENFERMEDAD para registrar → registrarEnfermedad. Para consultar → getEnfermedades.
 - Si el usuario pide APLICAR una vacuna a un bovino, usa aplicarVacuna (no crearVacuna).
-- crearDueno/crearRancho NO asignan a bovinos. transferirPropiedad SÍ asigna a un bovino.
+- crearRancho NO cambia al propietario de un bovino.
 - Si falta el nombre del bovino para eliminar/actualizar, pregunta cuál con una lista.
 
 Reglas estrictas para registrar bovinos:
@@ -1375,6 +1351,8 @@ Reglas estrictas para registrar bovinos:
 - Si el usuario mezcla "vaca" con sexo masculino, explícale que debe elegir Hembra o registrar un toro (Macho).
 
 Reglas generales:
+- Al registrar un bovino, la cuenta autenticada queda asignada automaticamente como propietaria.
+- No crees duenos desde la IA. crearDueno y transferirPropiedad no estan autorizadas.
 - Usa el HISTORIAL DE CONVERSACIÓN para entender referencias como "esa vaca", "y cuánto pesa", "la anterior", etc.
 - No inventes datos. Usa las herramientas para leer y escribir en la base de datos.
 - Si no encuentras el bovino en la cuenta del usuario, indícalo.
@@ -1411,7 +1389,7 @@ Reglas generales:
       argumentos: null,
       resultado: null,
       respuesta: pareceJsonHerramienta
-        ? "No pude completar la acción. Intenta de nuevo con el nombre del bovino y la vacuna."
+        ? "El modelo devolvio una llamada de herramienta invalida. Indica de nuevo el bovino y los datos de la accion."
         : content
     };
   }
@@ -1433,13 +1411,14 @@ Reglas generales:
       nombreAnimalContexto
     );
   } catch (error: any) {
+    const failure = describeToolError(error, toolName, argumentos);
     return {
       encontrado: true,
       tool: toolName,
       argumentos,
       resultado: null,
-      respuesta: "Ocurrió un error al ejecutar la herramienta.",
-      error: String(error?.message ?? error)
+      respuesta: failure.publicMessage,
+      error: failure.details
     };
   }
 
@@ -1452,4 +1431,8 @@ Reglas generales:
     resultado,
     respuesta
   };
-});
+}
+
+export default defineEventHandler(async (event) =>
+  withIaAnswer(await handleFunctionCalling(event))
+);

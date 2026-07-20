@@ -5,7 +5,6 @@ import {
   isReadQuery,
   isUnassignAction,
   isUpdateAction,
-  needsBovinoAssignment,
   normalizeIntentText
 } from "~/lib/iaIntentRouter";
 import { parseBovinoFieldsFromText } from "~/lib/bovinoFieldParser";
@@ -24,7 +23,7 @@ export type InferredAction = {
 };
 
 function hasWriteVerb(text: string) {
-  return /\b(aplica|aplicar|aplicale|aplicarle|registra|registrar|agrega|agregar|anade|anadir|asigna|asignar|asignale|asignarle|transfiere|transferir|transferirle|transfierelo|transfierela|ponle|anota|anotar|crea|crear|cree|elimina|eliminar|borra|borrar|actualiza|actualizar|modifica|modificar|quita|quitar|designa|designar)\b/.test(
+  return /\b(aplica|aplicar|aplicale|aplicarle|registra|registrar|registrale|agrega|agregar|agregale|anade|anadir|asigna|asignar|asignale|asignarle|transfiere|transfiera|transferir|transferirle|transfierelo|transfierela|envia|enviar|manda|mandar|pasa|pasar|traspasa|traspasar|ponle|anota|anotar|anotale|crea|crear|cree|elimina|eliminar|borra|borrar|actualiza|actualizar|actualizale|modifica|modificar|quita|quitar|designa|designar)\b/.test(
     text
   );
 }
@@ -35,8 +34,6 @@ function extractBovinoFromQuestion(
 ) {
   const contextMatch = pregunta.match(/\(sobre el bovino\s+([^)]+)\)/i);
   if (contextMatch?.[1]?.trim()) return contextMatch[1].trim();
-  if (nombreAnimalContexto?.trim()) return nombreAnimalContexto.trim();
-
   const patterns = [
     /\b(?:de la|del|de)\s+(?:vaca|bovino|toro)\s+([a-z0-9_-]+)/i,
     /\b(?:a|al|para)\s+(?:la\s+)?(?:vaca|bovino|toro)\s+([a-z0-9_-]+)/i,
@@ -48,6 +45,8 @@ function extractBovinoFromQuestion(
     const token = match?.[1]?.trim();
     if (token && !STOPWORDS.has(normalizeRouterText(token))) return token;
   }
+
+  if (nombreAnimalContexto?.trim()) return nombreAnimalContexto.trim();
 
   return "";
 }
@@ -75,6 +74,42 @@ function extractTokenAfter(text: string, pattern: RegExp): string | null {
   if (!token) return null;
   if (STOPWORDS.has(normalizeRouterText(token.split(/\s+/)[0] ?? ""))) return null;
   return token;
+}
+
+function extractTransferDestination(text: string) {
+  const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+  if (email) return email.toLowerCase();
+
+  const explicitUser = text.match(
+    /(?:al\s+usuario|a\s+la\s+usuaria|usuario|usuaria)\s+([A-Za-z0-9 _.-]+?)\s*[.!?]?$/i
+  );
+  if (explicitUser?.[1]?.trim()) return explicitUser[1].trim();
+
+  const trailingTarget = text.match(
+    /(?:\ba|\bhacia)\s+(?:la\s+cuenta\s+de\s+|el\s+usuario\s+|la\s+usuaria\s+)?([A-Za-z0-9._-]+(?:\s+[A-Za-z0-9._-]+){0,3})\s*[.!?]?$/i
+  );
+  return trailingTarget?.[1]?.trim() ?? "";
+}
+
+export function inferCrearSolicitudTransferencia(
+  pregunta: string,
+  nombreAnimalContexto?: string | null
+): InferredAction | null {
+  const t = normalizeIntentText(pregunta);
+  if (!/\b(transfiere|transfiera|transferir|envia|enviar|manda|mandar|pasa|pasar|traspasa|traspasar)\b/.test(t)) {
+    return null;
+  }
+  if (/\bmensaje\b/.test(t)) return null;
+  if (!/\b(bovino|vaca|toro)\b/.test(t) && !nombreAnimalContexto) return null;
+
+  const nombre_bovino = extractBovinoFromQuestion(pregunta, nombreAnimalContexto);
+  const usuario_destino = extractTransferDestination(pregunta);
+  if (!nombre_bovino || !usuario_destino) return null;
+
+  return {
+    tool: "crearSolicitudTransferencia",
+    args: { nombre_bovino, usuario_destino }
+  };
 }
 
 export function inferReadAction(
@@ -151,7 +186,7 @@ export function inferCrearCatalogo(pregunta: string): InferredAction | null {
       extractTokenAfter(t, /(?:dueno|dueño)\s+(?:llamado\s+|de nombre\s+)?([a-z0-9][a-z0-9 _-]{0,40})/i);
 
     if (!nombre) return null;
-    return { tool: "crearDueno", args: { nombre } };
+    return null;
   }
 
   if (/\brancho/.test(t)) {
@@ -176,6 +211,27 @@ export function inferCrearCatalogo(pregunta: string): InferredAction | null {
   }
 
   return null;
+}
+
+export function inferRegistrarPeso(
+  pregunta: string,
+  nombreAnimalContexto?: string | null
+): InferredAction | null {
+  const t = normalizeIntentText(pregunta);
+  if (!/\b(peso|pesa|kg|kilo|kilos)\b/.test(t) || isReadQuery(pregunta)) return null;
+  if (!hasWriteVerb(t)) return null;
+
+  const pesoText = pregunta.match(/(\d+(?:[.,]\d+)?)\s*(?:kg|kilos?)?(?:\s+de\s+peso)?/i)?.[1];
+  const peso = Number(String(pesoText ?? "").replace(",", "."));
+  if (!Number.isFinite(peso) || peso <= 0) return null;
+
+  const explicitTrailing = pregunta.match(
+    /(?:peso\s+(?:a|al|para)|(?:kg|kilos?)\s+(?:de\s+peso\s+)?(?:a|al|para))\s+(?:el\s+|la\s+)?(?:bovino\s+|vaca\s+|toro\s+)?([A-Za-zÁÉÍÓÚáéíóúÑñ0-9_-]+)[.!?]?$/i
+  )?.[1];
+  const nombre = extractBovinoFromQuestion(pregunta) || explicitTrailing || nombreAnimalContexto || "";
+  if (!nombre) return null;
+
+  return { tool: "registrarPeso", args: { nombre, peso } };
 }
 
 export function inferRegistrarEnfermedad(
@@ -223,38 +279,6 @@ export function inferAplicarVacuna(
   return {
     tool: "aplicarVacuna",
     args: { nombre_vaca, vacuna_nombre }
-  };
-}
-
-export function inferTransferirPropiedad(
-  pregunta: string,
-  nombreAnimalContexto?: string | null
-): InferredAction | null {
-  if (isCreateOnlyCatalog(pregunta)) return null;
-  if (!needsBovinoAssignment(pregunta)) return null;
-
-  const t = normalizeIntentText(pregunta);
-
-  const dueno_nombre =
-    extractQuotedOrNamed(pregunta, "(?:dueno|dueño)") ??
-    extractTokenAfter(t, /(?:dueno|dueño)\s+(?:llamado\s+|de\s+nombre\s+)?([a-z0-9][a-z0-9 _-]{0,40})/i);
-
-  const rancho_nombre =
-    extractQuotedOrNamed(pregunta, "rancho") ??
-    extractTokenAfter(t, /\brancho\s+(?:llamado\s+|de\s+nombre\s+)?([a-z0-9][a-z0-9 _-]{0,40})/i);
-
-  if (!dueno_nombre && !rancho_nombre) return null;
-
-  const nombre_vaca = extractBovinoFromQuestion(pregunta, nombreAnimalContexto);
-  if (!nombre_vaca) return null;
-
-  return {
-    tool: "transferirPropiedad",
-    args: {
-      nombre_vaca,
-      dueno_nombre: dueno_nombre ?? undefined,
-      rancho_nombre: rancho_nombre ?? undefined
-    }
   };
 }
 
@@ -380,14 +404,15 @@ export function inferActionFromQuestion(
 ): InferredAction | null {
   return (
     inferReadAction(pregunta, nombreAnimalContexto) ??
+    inferCrearSolicitudTransferencia(pregunta, nombreAnimalContexto) ??
+    inferRegistrarPeso(pregunta, nombreAnimalContexto) ??
     inferCrearBovino(pregunta) ??
     inferCrearCatalogo(pregunta) ??
     inferDeleteAction(pregunta, nombreAnimalContexto) ??
     inferUpdateAction(pregunta, nombreAnimalContexto) ??
     inferUnassignAction(pregunta, nombreAnimalContexto) ??
     inferRegistrarEnfermedad(pregunta, nombreAnimalContexto) ??
-    inferAplicarVacuna(pregunta, nombreAnimalContexto) ??
-    inferTransferirPropiedad(pregunta, nombreAnimalContexto)
+    inferAplicarVacuna(pregunta, nombreAnimalContexto)
   );
 }
 

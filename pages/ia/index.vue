@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { DEFAULT_IA_ERROR, normalizeIaAnswer } from "~/lib/iaResponse";
+
 definePageMeta({
   middleware: ["auth"]
 });
@@ -8,6 +10,7 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   blocked?: boolean;
+  serverId?: number;
 };
 
 const usuario = useState<any>("usuario", () => null);
@@ -15,6 +18,7 @@ const conversationId = ref<string | null>(null);
 const pregunta = ref("");
 const mensajes = ref<ChatMessage[]>([]);
 const loading = ref(false);
+const chatReady = ref(false);
 const estado = ref("");
 const errorMsg = ref("");
 const abortController = ref<AbortController | null>(null);
@@ -114,20 +118,27 @@ onMounted(async () => {
   iniciarReconocimientoVoz();
   inputRef.value?.focus();
 
-  if (!usuario.value?.id) return;
+  if (!usuario.value?.id) {
+    chatReady.value = true;
+    return;
+  }
 
   try {
     const conv = await $fetch(`/api/conversations/by-user/${usuario.value.id}`);
     if (conv) {
       conversationId.value = conv.id;
-      const historial = await $fetch<Array<{ role: string; content: string }>>(
+      const historial = await $fetch<Array<{ id: number; role: string; content: string }>>(
         `/api/conversations/${conv.id}/messages`
       );
-      mensajes.value = historial.map((m) => ({
-        id: uid(),
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: m.content ?? ""
-      }));
+      const seen = new Set<number>();
+      mensajes.value = historial
+        .filter((m) => !seen.has(Number(m.id)) && seen.add(Number(m.id)))
+        .map((m) => ({
+          id: `history-${m.id}`,
+          serverId: Number(m.id),
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: normalizeIaAnswer(m.content, "No se pudo recuperar esta respuesta.")
+        }));
     } else {
       const nueva = await $fetch("/api/conversations/create", {
         method: "POST",
@@ -137,6 +148,8 @@ onMounted(async () => {
     }
   } catch {
     errorMsg.value = "No se pudo cargar la conversación.";
+  } finally {
+    chatReady.value = true;
   }
 });
 
@@ -186,7 +199,10 @@ async function enviar(texto?: string) {
       signal: controller.signal
     });
 
-    if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null);
+      throw new Error(normalizeIaAnswer(errorPayload, `Error HTTP ${response.status}`));
+    }
     if (!response.body) throw new Error("Sin stream");
 
     const reader = response.body.getReader();
@@ -198,7 +214,7 @@ async function enviar(texto?: string) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
       let separatorIndex = buffer.indexOf("\n\n");
 
       while (separatorIndex !== -1) {
@@ -222,7 +238,14 @@ async function enviar(texto?: string) {
           } else if (dataText && assistant) {
             try {
               const parsed = JSON.parse(dataText);
-              if (parsed?.token) assistant.content += parsed.token;
+              if (parsed?.token && !parsed?.final) assistant.content += parsed.token;
+              if (parsed?.final || parsed?.answer) {
+                assistant.content = normalizeIaAnswer(
+                  parsed,
+                  assistant.content || DEFAULT_IA_ERROR
+                );
+                if (parsed?.message_id) assistant.serverId = Number(parsed.message_id);
+              }
               if (parsed?.estado) {
                 estado.value = parsed.estado;
                 if (parsed.estado.toLowerCase().includes("bloqueada")) {
@@ -230,7 +253,9 @@ async function enviar(texto?: string) {
                   assistant.blocked = true;
                 }
               }
-              if (parsed?.respuesta && !parsed?.token) assistant.content += parsed.respuesta;
+              if (parsed?.respuesta && !parsed?.token && !parsed?.answer) {
+                assistant.content = normalizeIaAnswer(parsed, assistant.content);
+              }
             } catch {
               assistant.content += dataText;
             }
@@ -244,15 +269,23 @@ async function enviar(texto?: string) {
     if (assistant?.content.includes("Solicitud bloqueada por seguridad")) {
       assistant.blocked = true;
     }
+    if (assistant && !assistant.content.trim()) {
+      assistant.content = DEFAULT_IA_ERROR;
+    }
   } catch (error: any) {
     const assistant = mensajes.value.find((m) => m.id === assistantId);
     if (error?.name !== "AbortError") {
-      if (assistant) assistant.content = "No pude procesar tu consulta. Intenta de nuevo.";
-      errorMsg.value = "Error consultando IA.";
+      const readableError = normalizeIaAnswer(error?.message, DEFAULT_IA_ERROR);
+      if (assistant) assistant.content = readableError;
+      errorMsg.value = readableError;
     } else if (assistant && !assistant.content) {
       mensajes.value = mensajes.value.filter((m) => m.id !== assistantId);
     }
   } finally {
+    const assistant = mensajes.value.find((m) => m.id === assistantId);
+    if (assistant && !assistant.content.trim()) {
+      assistant.content = DEFAULT_IA_ERROR;
+    }
     loading.value = false;
     estado.value = "";
     abortController.value = null;
@@ -342,6 +375,8 @@ function detenerStream() {
               <span v-if="msg.content">{{ msg.content }}</span>
               <span
                 v-else-if="loading && msg.role === 'assistant'"
+                role="status"
+                aria-label="Procesando solicitud"
                 class="inline-flex items-center gap-1.5 text-stone-400"
               >
                 <span class="w-2 h-2 rounded-full bg-stone-400 animate-bounce [animation-delay:0ms]" />
@@ -379,6 +414,8 @@ function detenerStream() {
           <textarea
             ref="inputRef"
             v-model="pregunta"
+            :data-chat-ready="chatReady"
+            :disabled="!chatReady"
             rows="1"
             placeholder="Escribe tu pregunta..."
             class="flex-1 resize-none max-h-32 px-3 py-2.5 bg-transparent outline-none text-[15px] text-stone-800 placeholder:text-stone-400"
@@ -413,7 +450,7 @@ function detenerStream() {
             <button
               type="button"
               @click="enviar()"
-              :disabled="loading || !pregunta.trim()"
+              :disabled="!chatReady || loading || !pregunta.trim()"
               class="w-10 h-10 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 transition flex items-center justify-center shadow-sm"
               title="Enviar"
             >

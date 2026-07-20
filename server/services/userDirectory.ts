@@ -58,6 +58,55 @@ export async function searchUsers(query: unknown, currentUserId: number, limit =
   }));
 }
 
+function mapExactUser(row: any, matchType: "email" | "exact_name"): DirectoryUser {
+  return {
+    id: Number(row.id),
+    nombre: String(row.nombre),
+    email: String(row.email),
+    match_type: matchType,
+    score: matchType === "email" ? 1 : 0.95
+  };
+}
+
+export async function resolveExactUser(query: unknown, currentUserId: number, field = "usuario_destino") {
+  const text = requiredText(query, field, 150);
+
+  const emailRows = await sql`
+    SELECT id, nombre, email
+    FROM usuarios
+    WHERE LOWER(email) = LOWER(${text})
+    LIMIT 2
+  `;
+  if (emailRows.length) {
+    const user = mapExactUser(emailRows[0], "email");
+    return user.id === currentUserId
+      ? { status: "self" as const, user, matches: [user] }
+      : { status: "found" as const, user, matches: [user] };
+  }
+
+  const nameRows = await sql`
+    SELECT id, nombre, email
+    FROM usuarios
+    WHERE LOWER(nombre) = LOWER(${text})
+    ORDER BY id ASC
+    LIMIT 20
+  `;
+  const matches = nameRows.map((row: any) => mapExactUser(row, "exact_name"));
+  if (!matches.length) {
+    return { status: "not_found" as const, matches: [] as DirectoryUser[] };
+  }
+  if (matches.length > 1) {
+    return { status: "ambiguous" as const, matches };
+  }
+
+  const user = matches[0];
+  return user.id === currentUserId
+    ? { status: "self" as const, user, matches }
+    : { status: "found" as const, user, matches };
+}
+
+export const resolveTransferUser = resolveExactUser;
+
 export async function resolveSingleUser(query: unknown, currentUserId: number) {
   const matches = await searchUsers(query, currentUserId, 10);
   const exactEmail = matches.find((item) => item.match_type === "email");
@@ -68,12 +117,7 @@ export async function resolveSingleUser(query: unknown, currentUserId: number) {
     return { status: "found" as const, user: exactNames[0], matches };
   }
 
-  if (matches.length === 1) {
-    return { status: "found" as const, user: matches[0], matches };
-  }
-
   return matches.length
     ? { status: "ambiguous" as const, matches }
     : { status: "not_found" as const, matches: [] as DirectoryUser[] };
 }
-

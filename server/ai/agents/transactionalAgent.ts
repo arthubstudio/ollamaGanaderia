@@ -1,10 +1,14 @@
 import type { AgentContext } from "~/server/ai/context/agentContext";
+import { withIaAnswer } from "~/lib/iaResponse";
 
 export const TRANSACTIONAL_AGENT_PROMPT = `
 Eres el agente transaccional de Ganaderia AI.
 Usa solo las herramientas autorizadas y los datos del usuario autenticado.
 No inventes nombres, aretes, vacunas, IDs ni parametros faltantes.
 Usa el contexto reciente solo para resolver referencias a entidades ya mencionadas.
+El propietario de un bovino es la cuenta autenticada; nunca crees duenos desde la IA.
+Transferir, enviar, mandar, pasar o traspasar un bovino siempre crea una solicitud de transferencia.
+La propiedad solo cambia cuando el usuario receptor acepta la solicitud.
 Nunca consultes RAG ni vuelvas a llamar al router.
 `.trim();
 
@@ -25,12 +29,11 @@ export const AUTHORIZED_TRANSACTIONAL_TOOLS = new Set([
   "eliminarVacuna",
   "eliminarVacunaAplicada",
   "registrarPeso",
+  "registrarVenta",
   "registrarEnfermedad",
   "actualizarEnfermedad",
   "eliminarEnfermedad",
-  "transferirPropiedad",
   "quitarPropiedad",
-  "crearDueno",
   "eliminarDueno",
   "crearRancho",
   "eliminarRancho",
@@ -59,6 +62,7 @@ export type TransactionalAgentResult = {
   tool: string | null;
   argumentos?: Record<string, unknown> | null;
   resultado?: unknown;
+  answer: string;
   respuesta: string;
 };
 
@@ -75,11 +79,12 @@ export async function runTransactionalAgent(params: {
     return {
       encontrado: false,
       tool: null,
+      answer: "La herramienta solicitada no esta autorizada.",
       respuesta: "La herramienta solicitada no esta autorizada."
     };
   }
 
-  const response = await params.event.$fetch("/api/ia/function-calling", {
+  const response: any = await params.event.$fetch("/api/ia/function-calling", {
     method: "POST",
     body: {
       pregunta: params.message,
@@ -97,9 +102,10 @@ export async function runTransactionalAgent(params: {
     return {
       encontrado: false,
       tool: null,
+      answer: "El modelo solicito una herramienta no autorizada.",
       respuesta: "El modelo solicito una herramienta no autorizada."
     };
   }
 
-  return response as TransactionalAgentResult;
+  return withIaAnswer(response) as TransactionalAgentResult;
 }

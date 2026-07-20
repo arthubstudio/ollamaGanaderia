@@ -20,7 +20,12 @@ const form = reactive({
 
 });
 
+const loading = ref(false);
+const errorMessage = ref("");
+
 async function crear() {
+
+  if (loading.value) return;
 
   if (!usuario.value?.id) {
 
@@ -32,9 +37,13 @@ async function crear() {
 
   }
 
-  await $fetch(
-    "/api/duenos",
-    {
+  errorMessage.value = "";
+  loading.value = true;
+
+  try {
+    await $fetch(
+      "/api/duenos",
+      {
 
       method: "POST",
 
@@ -47,12 +56,17 @@ async function crear() {
 
       }
 
-    }
-  );
+      }
+    );
 
-  await navigateTo(
-    "/duenos"
-  );
+    await navigateTo(
+      "/duenos"
+    );
+  } catch (error: any) {
+    errorMessage.value = error?.data?.data?.message ?? error?.data?.statusMessage ?? "No se pudo crear el dueno.";
+  } finally {
+    loading.value = false;
+  }
 
 }
 
@@ -90,11 +104,14 @@ async function crear() {
         class="w-full border border-gray-200 rounded-2xl p-4 h-32"
       />
 
+      <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
+
       <button
         @click="crear"
-        class="bg-black text-white px-6 py-4 rounded-2xl"
+        :disabled="loading"
+        class="bg-black text-white px-6 py-4 rounded-2xl disabled:opacity-50"
       >
-        Guardar
+        {{ loading ? "Guardando..." : "Guardar" }}
       </button>
 
     </div>

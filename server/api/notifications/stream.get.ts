@@ -16,12 +16,12 @@ export default defineEventHandler(async (event) => {
     }
   };
 
-  await publish();
   const interval = setInterval(() => publish().catch(() => null), 2000);
+  const initialPublish = setTimeout(() => publish().catch(() => null), 0);
   stream.onClosed(async () => {
+    clearTimeout(initialPublish);
     clearInterval(interval);
     await stream.close();
   });
   return stream.send();
 });
-

@@ -212,6 +212,59 @@ test("pide bovino cuando se cambia peso sin contexto", () => {
   assert.deepEqual(plan.pending.missing, ["nombre"]);
 });
 
+test("registra peso con las variantes naturales solicitadas", () => {
+  for (const text of [
+    "Al bovino Carlota agrégale un peso de 345 kg",
+    "Ponle 345 kg de peso a Carlota",
+    "Registra 345 de peso al bovino Carlota"
+  ]) {
+    const plan = planIaTurn({ text, pending: null });
+    assert.equal(plan.kind, "pending", text);
+    assert.equal(plan.pending.tool, "registrarPeso", text);
+    assert.equal(plan.pending.args.nombre, "Carlota", text);
+    assert.equal(plan.pending.args.peso, 345, text);
+    assert.equal(plan.pending.awaitingConfirmation, true, text);
+  }
+});
+
+test("aplicar una vacuna nunca se confunde con crear bovino", () => {
+  const plan = planIaTurn({
+    text: "Al bovino Carlota agrégale la vacuna Brucelosis",
+    pending: null
+  });
+  assert.equal(plan.kind, "pending");
+  assert.equal(plan.pending.tool, "aplicarVacuna");
+  assert.equal(plan.pending.args.nombre_vaca, "Carlota");
+  assert.equal(plan.pending.args.vacuna_nombre, "Brucelosis");
+});
+
+test("cambia de tema y cancela el contexto pendiente", () => {
+  const pending = {
+    tool: "crearBovino",
+    args: { nombre: "Luna" },
+    missing: ["sexo", "raza"],
+    awaitingConfirmation: false
+  };
+  const vaccine = planIaTurn({
+    text: "Aplica la vacuna Brucelosis a Carlota",
+    pending
+  });
+  assert.equal(vaccine.pending.tool, "aplicarVacuna");
+  assert.equal(vaccine.pending.args.nombre_vaca, "Carlota");
+  assert.equal(vaccine.pending.args.sexo, undefined);
+
+  const breeds = planIaTurn({ text: "Dame las razas disponibles", pending });
+  assert.equal(breeds.kind, "query");
+  assert.equal(breeds.query.tool, "listarRazas");
+  assert.equal(breeds.clearPending, true);
+});
+
+test("un si sin accion pendiente no ejecuta ninguna tool", () => {
+  const plan = planIaTurn({ text: "Sí", pending: null });
+  assert.equal(plan.kind, "clarify");
+  assert.match(plan.respuesta, /no hay una accion pendiente/i);
+});
+
 test("formatea aretes consecutivos con cuatro digitos", () => {
   assert.equal(formatAreteConsecutivo(1), "MX-0001");
   assert.equal(formatAreteConsecutivo(42), "MX-0042");
@@ -231,11 +284,87 @@ test("planea transferencia entre cuentas y exige confirmacion", () => {
   assert.equal(result.pending.awaitingConfirmation, true);
 });
 
+test("todos los verbos de transferencia usan una solicitud entre cuentas", () => {
+  for (const verbo of ["Transfiere", "Envia", "Manda", "Pasa", "Traspasa"]) {
+    const result = planIaTurn({
+      text: `${verbo} la vaca Bolita a user1`,
+      pending: null
+    });
+
+    assert.equal(result.kind, "pending", verbo);
+    assert.equal(result.pending.tool, "crearSolicitudTransferencia", verbo);
+    assert.equal(result.pending.args.nombre_bovino, "Bolita", verbo);
+    assert.equal(result.pending.args.usuario_destino, "User1", verbo);
+    assert.equal(result.pending.awaitingConfirmation, true, verbo);
+  }
+});
+
+test("extrae transferencia en subjuntivo por username o correo", () => {
+  const cases = [
+    ["quiero que transfiera el bovino Bolita a user2", "User2"],
+    ["quiero que transfiera el bovino Bolita a user2@gmail.com", "user2@gmail.com"]
+  ];
+
+  for (const [text, destination] of cases) {
+    const result = planIaTurn({ text, pending: null });
+    assert.equal(result.kind, "pending", text);
+    assert.equal(result.pending.tool, "crearSolicitudTransferencia", text);
+    assert.equal(result.pending.args.nombre_bovino, "Bolita", text);
+    assert.equal(result.pending.args.usuario_destino, destination, text);
+    assert.equal(result.pending.awaitingConfirmation, true, text);
+  }
+});
+
+test("la IA no permite crear duenos manualmente", () => {
+  const result = planIaTurn({
+    text: "Crea un dueño llamado user1",
+    pending: null
+  });
+
+  assert.equal(result.kind, "clarify");
+  assert.match(result.respuesta, /cuenta.*propietaria/i);
+  assert.equal(__test.extractAction("Crea un dueño llamado user1"), null);
+});
+
 test("limita el listado conversacional de razas a la tool especializada", () => {
-  const result = planIaTurn({ text: "Que razas tienes?", pending: null });
-  assert.equal(result.kind, "query");
-  assert.equal(result.query.tool, "listarRazas");
-  assert.equal(result.query.args.limite, 10);
+  for (const text of [
+    "¿Qué razas tengo?",
+    "Dame las razas disponibles",
+    "Enlista todas las razas",
+    "Muéstrame las razas registradas"
+  ]) {
+    const result = planIaTurn({ text, pending: null });
+    assert.equal(result.kind, "query", text);
+    assert.equal(result.query.tool, "listarRazas", text);
+    assert.equal(result.query.args.limite, 10, text);
+  }
+});
+
+test("detecta solicitudes de amistad por username o correo", () => {
+  const cases = [
+    ["Envíale una solicitud de amistad a hugoboss", "Hugoboss"],
+    ["Agrega a Carlos como amigo", "Carlos"],
+    ["Manda solicitud al usuario user2@gmail.com", "user2@gmail.com"]
+  ];
+  for (const [text, target] of cases) {
+    const result = planIaTurn({ text, pending: null });
+    assert.equal(result.kind, "pending", text);
+    assert.equal(result.pending.tool, "enviarSolicitudAmistad", text);
+    assert.equal(result.pending.args.usuario_destino, target, text);
+  }
+});
+
+test("resuelve venta por nombre inicial o bovino reciente", () => {
+  const named = planIaTurn({ text: "¿Marisol está lista para la venta?", pending: null });
+  assert.equal(named.kind, "query");
+  assert.equal(named.query.args.nombre, "Marisol");
+
+  const contextual = planIaTurn({
+    text: "¿Puedo vender a este bovino?",
+    pending: null,
+    context: { ultimo_bovino_nombre: "Marisol" }
+  });
+  assert.equal(contextual.query.args.nombre, "Marisol");
 });
 
 test("extrae destinatario y contenido de un mensaje comunitario", () => {

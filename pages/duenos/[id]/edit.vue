@@ -8,6 +8,8 @@ const form = reactive({
   telefono: "",
   direccion: "",
 })
+const loading = ref(false)
+const errorMessage = ref("")
 
 watchEffect(() => {
   if (dueno.value) {
@@ -18,11 +20,20 @@ watchEffect(() => {
 })
 
 async function guardar() {
-  await $fetch(`/api/duenos/${route.params.id}`, {
-    method: "PUT",
-    body: form,
-  })
-  await navigateTo(`/duenos`)
+  if (loading.value) return
+  errorMessage.value = ""
+  loading.value = true
+  try {
+    await $fetch(`/api/duenos/${route.params.id}`, {
+      method: "PUT",
+      body: form,
+    })
+    await navigateTo(`/duenos`)
+  } catch (error: any) {
+    errorMessage.value = error?.data?.data?.message ?? error?.data?.statusMessage ?? "No se pudo actualizar el dueno."
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -34,7 +45,10 @@ async function guardar() {
       <input v-model="form.nombre" placeholder="Nombre" class="w-full border border-gray-200 rounded-2xl p-4" />
       <input v-model="form.telefono" placeholder="Teléfono" class="w-full border border-gray-200 rounded-2xl p-4" />
       <textarea v-model="form.direccion" placeholder="Dirección" class="w-full border border-gray-200 rounded-2xl p-4 h-32" />
-      <button @click="guardar" class="bg-black text-white px-6 py-4 rounded-2xl">Actualizar</button>
+      <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
+      <button @click="guardar" :disabled="loading" class="bg-black text-white px-6 py-4 rounded-2xl disabled:opacity-50">
+        {{ loading ? "Actualizando..." : "Actualizar" }}
+      </button>
     </div>
   </div>
 </template>

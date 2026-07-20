@@ -5,6 +5,7 @@ definePageMeta({
 });
 
 const search = ref("");
+const deletingId = ref<number | null>(null);
 
 const usuario =
   useState<any>(
@@ -68,6 +69,8 @@ async function eliminarBovino(
   id: number
 ) {
 
+  if (deletingId.value !== null) return;
+
   const ok =
     confirm(
       "¿Eliminar este bovino?"
@@ -76,6 +79,8 @@ async function eliminarBovino(
   if (!ok) {
     return;
   }
+
+  deletingId.value = id;
 
   try {
 
@@ -97,6 +102,10 @@ async function eliminarBovino(
     alert(
       "No se pudo eliminar. Revisa registros relacionados."
     );
+
+  } finally {
+
+    deletingId.value = null;
 
   }
 
@@ -252,9 +261,10 @@ async function eliminarBovino(
 
                 <button
                   @click="eliminarBovino(bovino.id)"
-                  class="px-3 py-2 rounded-xl text-sm bg-red-600 text-white"
+                  :disabled="deletingId !== null"
+                  class="px-3 py-2 rounded-xl text-sm bg-red-600 text-white disabled:opacity-50"
                 >
-                  Eliminar
+                  {{ deletingId === Number(bovino.id) ? "Eliminando..." : "Eliminar" }}
                 </button>
 
               </div>

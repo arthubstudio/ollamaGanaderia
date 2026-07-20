@@ -12,7 +12,10 @@ export default defineEventHandler(async (event) => runApi(async () => {
     breed_id: body?.breed_id ? Number(body.breed_id) : undefined,
     sexo: String(body?.sexo ?? ""),
     fecha_nacimiento: optionalDate(body?.fecha_nacimiento, "La fecha de nacimiento") ?? undefined,
-    estado
+    estado,
+    rancho_id: body?.rancho_id ? Number(body.rancho_id) : undefined,
+    dueno_id: body?.dueno_id ? Number(body.dueno_id) : undefined,
+    dueno_ids: Array.isArray(body?.dueno_ids) ? body.dueno_ids.map(Number) : undefined
   }, userId);
 
   if (!result.ok) {

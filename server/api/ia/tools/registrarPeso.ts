@@ -2,7 +2,6 @@ import { db } from "~/lib/db";
 import { pesos } from "~/drizzle/schema";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 import { findBovinoByNombre } from "./findBovino";
-import { desc, eq } from "drizzle-orm";
 
 export type RegistrarPesoArgs = {
   nombre: string;
@@ -44,38 +43,15 @@ export async function registrarPeso(
     };
   }
 
-  const ultimoPeso = await db
-    .select()
-    .from(pesos)
-    .where(eq(pesos.bovino_id, bovino.id))
-    .orderBy(desc(pesos.fecha), desc(pesos.id))
-    .limit(1);
-
-  let registro;
-
-  if (ultimoPeso.length) {
-    const result = await db
-      .update(pesos)
-      .set({
-        peso: String(args.peso),
-        fecha: args.fecha?.trim() || todayIsoDate()
-      })
-      .where(eq(pesos.id, ultimoPeso[0].id))
-      .returning();
-
-    registro = result[0];
-  } else {
-    const result = await db
-      .insert(pesos)
-      .values({
-        bovino_id: bovino.id,
-        peso: String(args.peso),
-        fecha: args.fecha?.trim() || todayIsoDate()
-      })
-      .returning();
-
-    registro = result[0];
-  }
+  const result = await db
+    .insert(pesos)
+    .values({
+      bovino_id: bovino.id,
+      peso: String(args.peso),
+      fecha: args.fecha?.trim() || todayIsoDate()
+    })
+    .returning();
+  const registro = result[0];
 
   await rebuildBovinoContext(bovino.id);
 

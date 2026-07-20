@@ -7,6 +7,8 @@ const { data: bovino } = await useFetch(`/api/bovinos/${bovinoId}`);
 const { data: breedData } = await useFetch("/api/breeds", { query: { active: true, limit: 100 } });
 const breeds = computed(() => breedData.value?.items ?? []);
 const breedSearch = ref("");
+const loading = ref(false);
+const errorMessage = ref("");
 const filteredBreeds = computed(() => {
   const query = breedSearch.value.toLowerCase().trim();
   return query ? breeds.value.filter((item: any) => String(item.nombre).toLowerCase().includes(query)) : breeds.value;
@@ -32,13 +34,22 @@ watchEffect(() => {
 });
 
 async function guardar() {
+  if (loading.value) return;
   const breed = breeds.value.find((item: any) => Number(item.id) === Number(form.breed_id));
   if (!breed) return alert("Selecciona una raza activa del catalogo.");
-  await $fetch(`/api/bovinos/${bovinoId}`, {
-    method: "PUT",
-    body: { ...form, raza: breed.nombre }
-  });
-  await navigateTo(`/bovinos/${bovinoId}`);
+  errorMessage.value = "";
+  loading.value = true;
+  try {
+    await $fetch(`/api/bovinos/${bovinoId}`, {
+      method: "PUT",
+      body: { ...form, raza: breed.nombre }
+    });
+    await navigateTo(`/bovinos/${bovinoId}`);
+  } catch (error: any) {
+    errorMessage.value = error?.data?.data?.message ?? error?.data?.statusMessage ?? "No se pudo actualizar el bovino.";
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
@@ -67,7 +78,10 @@ async function guardar() {
         <option value="vendida">Vendida</option>
         <option value="baja">Baja</option>
       </select>
-      <button @click="guardar" class="bg-black text-white px-6 py-3 rounded-2xl">Guardar cambios</button>
+      <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
+      <button @click="guardar" :disabled="loading" class="bg-black text-white px-6 py-3 rounded-2xl disabled:opacity-50">
+        {{ loading ? "Guardando..." : "Guardar cambios" }}
+      </button>
     </div>
   </div>
 </template>

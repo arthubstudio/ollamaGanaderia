@@ -16,6 +16,8 @@ const { data: pesos } = await useFetch("/api/pesos", {
 });
 
 const ultimoPeso = computed(() => pesos.value?.[0] ?? null);
+const loading = ref(false);
+const errorMessage = ref("");
 
 const form = reactive({
   peso: "",
@@ -34,6 +36,7 @@ watch(
 );
 
 async function guardar() {
+  if (loading.value) return;
   if (!usuario.value?.id) {
     alert("Debes iniciar sesión.");
     return;
@@ -44,6 +47,8 @@ async function guardar() {
     return;
   }
 
+  errorMessage.value = "";
+  loading.value = true;
   try {
     await $fetch(`/api/pesos/${ultimoPeso.value.id}`, {
       method: "PUT",
@@ -55,9 +60,11 @@ async function guardar() {
     });
 
     await navigateTo(`/bovinos/${vacaId}`);
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    alert("Error actualizando peso");
+    errorMessage.value = error?.data?.data?.message ?? error?.data?.statusMessage ?? "No se pudo actualizar el peso.";
+  } finally {
+    loading.value = false;
   }
 }
 </script>
@@ -80,11 +87,14 @@ async function guardar() {
         class="w-full border border-gray-200 rounded-2xl p-4"
       />
 
+      <p v-if="errorMessage" class="text-sm text-red-600">{{ errorMessage }}</p>
+
       <button
         @click="guardar"
-        class="bg-black text-white px-6 py-4 rounded-2xl"
+        :disabled="loading"
+        class="bg-black text-white px-6 py-4 rounded-2xl disabled:opacity-50"
       >
-        Guardar cambios
+        {{ loading ? "Guardando..." : "Guardar cambios" }}
       </button>
     </div>
   </div>

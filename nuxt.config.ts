@@ -6,7 +6,10 @@ export default defineNuxtConfig({
     sessionSecret: process.env.NUXT_SESSION_SECRET || "ganaderia-ai-local-dev-change-me"
   },
   nitro: {
-    errorHandler: "~/server/error-handler.ts"
+    errorHandler: "~/server/error-handler.ts",
+    experimental: {
+      websocket: true
+    }
   },
   modules: [
     "@nuxtjs/tailwindcss",

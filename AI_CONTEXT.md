@@ -118,11 +118,15 @@ app/
     accountTransfer.ts       Solicitudes y aceptacion entre cuentas
     breedService.ts          Catalogo global de razas
     community.ts             Amistades, conversaciones y mensajes
+    communityRealtime.ts     Hub WebSocket, sincronizacion y acuses del chat
     notifications.ts         Bandeja y estado de lectura
     userDirectory.ts         Busqueda priorizada de usuarios
     activityAudit.ts         Auditoria operativa
     vaccination.ts           Regla transaccional de vacunacion cada seis meses
     ownershipRelations.ts    Relaciones activas rancho-duenos y bovino-duenos
+
+  server/routes/_ws/
+    community.ts             WebSocket autenticado del chat entre usuarios
 
   lib/                       Logica compartida
     db.ts                    Conexion Drizzle/PostgreSQL
@@ -150,6 +154,7 @@ app/
   e2e/
     ia.spec.ts               Prueba E2E del asistente IA
     ia.improvements.spec.ts  Reglas de vacunacion, venta, relaciones, contexto y loading
+    community.websocket.spec.ts  Tiempo real, deduplicacion, reconexion y lectura
 ```
 
 ## Flujo principal
@@ -211,6 +216,8 @@ app/
 
 14. El chat usa streaming tipo SSE para pintar tokens y estados en tiempo real.
 
+15. El chat privado entre usuarios usa `/_ws/community`: autentica la cookie firmada durante el upgrade, persiste cada mensaje antes del acuse, publica cambios por WebSocket y recupera mensajes posteriores al ultimo cursor al reconectar.
+
 ## Base de datos y modelos
 
 Tablas principales:
@@ -238,7 +245,7 @@ Tablas principales:
 - `bovino_transfer_events`: bitacora inmutable de cada transferencia.
 - `notifications` y `notification_reads`: notificaciones y lecturas por usuario.
 - `friend_requests` y `friendships`: solicitudes y contactos confirmados.
-- `community_conversations`, `community_conversation_members` y `community_messages`: chat privado separado de las conversaciones IA.
+- `community_conversations`, `community_conversation_members` y `community_messages`: chat privado separado de las conversaciones IA. Cada mensaje puede guardar `client_message_id`, `delivered_at` y `read_at`.
 - `activity_audit_logs`: acciones operativas, permisos, duracion y errores controlados.
 
 Notas importantes:
@@ -304,8 +311,10 @@ npm run preview
 npm run postinstall
 npm run db:migrate:platform
 npm run db:migrate:improvements
+npm run db:migrate:websocket
 npm run test:e2e:platform
 npm run test:e2e:improvements
+npm run test:e2e:chat
 ```
 
 ## Convenciones importantes
@@ -357,7 +366,8 @@ npm run test:e2e:improvements
 - Las razas globales pueden ser administradas por usuarios con rol `admin`; una raza personalizada tambien puede editarla su creador.
 - La busqueda de usuarios prioriza correo exacto, nombre exacto, nombre parcial y similitud con `pg_trgm`.
 - El chat comunitario solo se habilita entre contactos confirmados. Sus tablas no se mezclan con `conversations` de IA.
-- Notificaciones y mensajes usan SSE con sondeo corto de PostgreSQL; no requieren un servicio Docker adicional.
+- Los mensajes usan WebSocket de Nitro con recuperacion por cursor y respaldo HTTP idempotente. Las notificaciones conservan SSE; ninguno requiere un servicio Docker adicional.
+- El estado visible de un mensaje se deriva de PostgreSQL: `sending` es optimista en Vue y `sent`, `delivered` y `read` dependen del alta, `delivered_at` y `read_at`.
 - Las nuevas tools comparten servicios con la interfaz y nunca toman `usuario_id` del texto ni del body.
 
 ## Pendientes o riesgos detectados
@@ -379,6 +389,6 @@ npm run test:e2e:improvements
 - El modelo `BAAI/bge-reranker-v2-m3` es pesado; el servicio es opcional y se activa con el perfil Compose `reranker`.
 - No existen metricas oficiales de Semana 7 hasta ejecutar `npm run evaluate:agent` en el entorno de entrega.
 - El catalogo inicial incluye 50 razas principales, no un censo mundial exhaustivo de 800-900 razas.
-- El SSE actual consulta PostgreSQL cada dos segundos por conexion. Para una instalacion con muchas instancias conviene incorporar PostgreSQL `LISTEN/NOTIFY` o un bus local, sin cambiar la API publica.
+- El hub WebSocket vive en memoria del proceso Nuxt. Para desplegar varias instancias simultaneas se necesita PostgreSQL `LISTEN/NOTIFY` o un bus local que distribuya eventos entre procesos; la persistencia y recuperacion por cursor ya permanecen en PostgreSQL.
 - Los archivos y fotografias no tienen tablas propias en el esquema actual. Cualquier tabla futura relacionada mediante `bovino_id` permanecera con el bovino durante la transferencia.
 - Las acciones pendientes de IA siguen en memoria; una seleccion de destinatario o confirmacion se pierde si el proceso Nuxt se reinicia.

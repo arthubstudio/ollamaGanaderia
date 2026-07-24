@@ -91,6 +91,7 @@ En una base existente, aplica las migraciones en orden. Todas son aditivas y usa
 npm run db:migrate:week7
 npm run db:migrate:platform
 npm run db:migrate:improvements
+npm run db:migrate:websocket
 ```
 
 En una base nueva, Docker Compose ejecuta `database/seeds.sql` y despues las migraciones montadas como scripts de inicializacion. En un volumen existente se deben ejecutar los comandos anteriores manualmente.
@@ -301,9 +302,11 @@ La migracion aditiva de esta fase se aplica en bases existentes con:
 
 ```bash
 npm run db:migrate:platform
+npm run db:migrate:improvements
+npm run db:migrate:websocket
 ```
 
-En bases nuevas, Docker Compose monta las migraciones `004` y `005` despues de `database/seeds.sql` y las ejecuta automaticamente. No elimina tablas ni registros.
+En bases nuevas, Docker Compose monta las migraciones `004`, `005` y `006` despues de `database/seeds.sql` y las ejecuta automaticamente. No elimina tablas ni registros.
 
 Funcionalidades disponibles:
 
@@ -311,7 +314,7 @@ Funcionalidades disponibles:
 - `/notificaciones`: actividad inmediata mediante SSE y estado leido.
 - `/razas`: catalogo global, busqueda, filtros, alta, edicion y activacion.
 - `/amigos`: busqueda de usuarios y solicitudes de contacto.
-- `/mensajes`: chat privado entre contactos mediante SSE.
+- `/mensajes`: chat privado entre contactos mediante WebSocket autenticado, reconexion y recuperacion por cursor.
 - `/bovinos/:id/historial`: bitacora permanente de transferencias del bovino.
 - `/observabilidad`: logs IA y auditoria operativa.
 
@@ -325,10 +328,13 @@ Si el arete ya existe en la cuenta receptora, se genera el siguiente arete atomi
 npm run test
 npm run test:e2e:improvements
 npm run test:e2e:platform -- --project=chromium
+npm run test:e2e:chat
 npm run build
 ```
 
 La prueba E2E crea dos cuentas unicas, registra raza, bovino y peso, transfiere el bovino, comprueba aislamiento de permisos, crea una amistad, envia un mensaje, revisa notificaciones, consulta el catalogo mediante IA y abre las paginas nuevas.
+
+`npm run test:e2e:chat` abre dos sesiones autenticadas y comprueba recepcion sin recarga, contador no leido, estados entregado/leido, deduplicacion por `client_message_id` y recuperacion despues de desconectar la red.
 
 Documentacion detallada:
 

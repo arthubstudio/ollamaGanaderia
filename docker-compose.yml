@@ -14,6 +14,7 @@ services:
       - ./database/seeds.sql:/docker-entrypoint-initdb.d/001-seeds.sql:ro
       - ./database/migrations/004_comunidad_transferencias_razas.sql:/docker-entrypoint-initdb.d/004-comunidad-transferencias-razas.sql:ro
       - ./database/migrations/005_vacunacion_relaciones_venta.sql:/docker-entrypoint-initdb.d/005-vacunacion-relaciones-venta.sql:ro
+      - ./database/migrations/006_chat_websocket.sql:/docker-entrypoint-initdb.d/006-chat-websocket.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ganaderia -d ganaderia_ai"]
       interval: 10s

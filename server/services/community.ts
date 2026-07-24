@@ -195,7 +195,7 @@ export async function listFriends(userId: number) {
   `;
 }
 
-async function requireConversationMember(client: any, conversationId: string, userId: number) {
+export async function requireConversationMember(client: any, conversationId: string, userId: number) {
   const rows = await client`
     SELECT conversation_id FROM community_conversation_members
     WHERE conversation_id = ${conversationId} AND user_id = ${userId}
@@ -204,6 +204,20 @@ async function requireConversationMember(client: any, conversationId: string, us
   if (!rows.length) {
     apiError({ statusCode: 404, code: "NOT_FOUND", message: "Conversacion no encontrada." });
   }
+}
+
+export async function listCommunityConversationParticipantIds(
+  conversationIdValue: unknown,
+  client: any = sql
+) {
+  const conversationId = requiredText(conversationIdValue, "conversation_id", 100);
+  const rows = await client`
+    SELECT user_id
+    FROM community_conversation_members
+    WHERE conversation_id = ${conversationId}
+    ORDER BY user_id ASC
+  `;
+  return rows.map((row: any) => Number(row.user_id));
 }
 
 export async function getOrCreateDirectConversation(userId: number, contactUserIdValue: unknown) {
@@ -303,11 +317,69 @@ export async function sendCommunityMessage(input: {
       apiError({ statusCode: 403, code: "CONTACT_REQUIRED", message: "El destinatario ya no es un contacto." });
     }
 
-    const rows = await tx`
-      INSERT INTO community_messages (conversation_id, sender_user_id, content)
-      VALUES (${conversationId}, ${input.userId}, ${content})
-      RETURNING *
-    `;
+    if (clientMessageId) {
+      const existing = await tx`
+        SELECT * FROM community_messages
+        WHERE sender_user_id = ${input.userId}
+          AND client_message_id = ${clientMessageId}
+        LIMIT 1
+      `;
+      if (existing.length) {
+        if (
+          String(existing[0].conversation_id) !== conversationId ||
+          String(existing[0].content) !== content
+        ) {
+          apiError({
+            statusCode: 409,
+            code: "CLIENT_MESSAGE_CONFLICT",
+            message: "El identificador del mensaje ya fue utilizado con otros datos."
+          });
+        }
+        return { ...existing[0], duplicate: true };
+      }
+    }
+
+    const rows = clientMessageId
+      ? await tx`
+          INSERT INTO community_messages (
+            conversation_id, sender_user_id, client_message_id, content
+          ) VALUES (
+            ${conversationId}, ${input.userId}, ${clientMessageId}, ${content}
+          )
+          ON CONFLICT (sender_user_id, client_message_id)
+            WHERE client_message_id IS NOT NULL
+          DO NOTHING
+          RETURNING *
+        `
+      : await tx`
+          INSERT INTO community_messages (conversation_id, sender_user_id, content)
+          VALUES (${conversationId}, ${input.userId}, ${content})
+          RETURNING *
+        `;
+
+    if (!rows.length && clientMessageId) {
+      const existing = await tx`
+        SELECT * FROM community_messages
+        WHERE sender_user_id = ${input.userId}
+          AND client_message_id = ${clientMessageId}
+        LIMIT 1
+      `;
+      if (!existing.length) {
+        apiError({ statusCode: 500, code: "MESSAGE_NOT_SAVED", message: "No se pudo guardar el mensaje." });
+      }
+      if (
+        String(existing[0].conversation_id) !== conversationId ||
+        String(existing[0].content) !== content
+      ) {
+        apiError({
+          statusCode: 409,
+          code: "CLIENT_MESSAGE_CONFLICT",
+          message: "El identificador del mensaje ya fue utilizado con otros datos."
+        });
+      }
+      return { ...existing[0], duplicate: true };
+    }
+
     await tx`UPDATE community_conversations SET updated_at = NOW() WHERE id = ${conversationId}`;
     await tx`
       INSERT INTO notifications (
@@ -321,14 +393,15 @@ export async function sendCommunityMessage(input: {
       )
     `;
     await recordActivity({ actorUserId: input.userId, action: "message.sent", entityType: "community_message", entityId: rows[0].id, metadata: { conversation_id: conversationId }, client: tx });
-    return { ...rows[0], client_message_id: clientMessageId };
+    return { ...rows[0], duplicate: false };
   });
 }
 
 export async function listCommunityUpdates(userId: number, afterValue?: unknown) {
   const after = Math.max(Number(afterValue) || 0, 0);
-  const messages = await sql`
-    SELECT m.id, m.conversation_id, m.sender_user_id, m.content, m.created_at,
+  const rows = await sql`
+    SELECT m.id, m.conversation_id, m.sender_user_id, m.client_message_id,
+           m.content, m.created_at, m.delivered_at, m.read_at,
            u.nombre AS sender_name,
            (m.sender_user_id = ${userId}) AS is_mine
     FROM community_messages m
@@ -337,11 +410,70 @@ export async function listCommunityUpdates(userId: number, afterValue?: unknown)
     JOIN usuarios u ON u.id = m.sender_user_id
     WHERE m.deleted_at IS NULL AND m.id > ${after}
     ORDER BY m.id ASC
-    LIMIT 200
+    LIMIT 201
   `;
+  const hasMore = rows.length > 200;
+  const messages = hasMore ? rows.slice(0, 200) : rows;
   const cursor = Number(messages[messages.length - 1]?.id ?? after);
   const conversations = await listCommunityConversations(userId);
-  return { cursor, messages, conversations };
+  return { cursor, messages, conversations, has_more: hasMore };
+}
+
+export async function getCommunityMessageForUser(userId: number, messageIdValue: unknown) {
+  const messageId = parseId(messageIdValue, "message_id");
+  const rows = await sql`
+    SELECT m.id, m.conversation_id, m.sender_user_id, m.client_message_id,
+           m.content, m.created_at, m.delivered_at, m.read_at,
+           u.nombre AS sender_name,
+           (m.sender_user_id = ${userId}) AS is_mine
+    FROM community_messages m
+    JOIN community_conversation_members member
+      ON member.conversation_id = m.conversation_id AND member.user_id = ${userId}
+    JOIN usuarios u ON u.id = m.sender_user_id
+    WHERE m.id = ${messageId} AND m.deleted_at IS NULL
+    LIMIT 1
+  `;
+  if (!rows.length) {
+    apiError({ statusCode: 404, code: "NOT_FOUND", message: "Mensaje no encontrado." });
+  }
+  return rows[0];
+}
+
+export async function markCommunityMessagesDelivered(
+  userId: number,
+  conversationIdValue: unknown,
+  messageIdValue?: unknown
+) {
+  const conversationId = requiredText(conversationIdValue, "conversation_id", 100);
+  const upToMessageId = Math.max(Number(messageIdValue) || 0, 0);
+  return sql.begin(async (tx) => {
+    await requireConversationMember(tx, conversationId, userId);
+    return tx`
+      UPDATE community_messages
+      SET delivered_at = COALESCE(delivered_at, NOW())
+      WHERE conversation_id = ${conversationId}
+        AND sender_user_id <> ${userId}
+        AND deleted_at IS NULL
+        AND delivered_at IS NULL
+        AND (${upToMessageId} = 0 OR id <= ${upToMessageId})
+      RETURNING id, conversation_id, sender_user_id, delivered_at, read_at
+    `;
+  });
+}
+
+export async function markAllCommunityMessagesDelivered(userId: number) {
+  return sql`
+    UPDATE community_messages message
+    SET delivered_at = COALESCE(message.delivered_at, NOW())
+    FROM community_conversation_members member
+    WHERE member.conversation_id = message.conversation_id
+      AND member.user_id = ${userId}
+      AND message.sender_user_id <> ${userId}
+      AND message.deleted_at IS NULL
+      AND message.delivered_at IS NULL
+    RETURNING message.id, message.conversation_id, message.sender_user_id,
+              message.delivered_at, message.read_at
+  `;
 }
 
 export async function markCommunityConversationRead(
@@ -361,14 +493,30 @@ export async function markCommunityConversationRead(
         AND (${requestedId} = 0 OR id <= ${requestedId})
     `;
     const lastId = Number(rows[0]?.last_id ?? 0);
+    let readMessages: any[] = [];
     if (lastId) {
       await tx`
         UPDATE community_conversation_members
         SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), ${lastId})
         WHERE conversation_id = ${conversationId} AND user_id = ${userId}
       `;
+      readMessages = await tx`
+        UPDATE community_messages
+        SET delivered_at = COALESCE(delivered_at, NOW()),
+            read_at = COALESCE(read_at, NOW())
+        WHERE conversation_id = ${conversationId}
+          AND sender_user_id <> ${userId}
+          AND deleted_at IS NULL
+          AND id <= ${lastId}
+          AND read_at IS NULL
+        RETURNING id, conversation_id, sender_user_id, delivered_at, read_at
+      `;
     }
-    return { conversation_id: conversationId, last_read_message_id: lastId };
+    return {
+      conversation_id: conversationId,
+      last_read_message_id: lastId,
+      read_messages: readMessages
+    };
   });
 }
 
@@ -377,7 +525,8 @@ export async function readCommunityConversation(userId: number, conversationIdVa
   const after = Math.max(Number(afterValue) || 0, 0);
   await requireConversationMember(sql, conversationId, userId);
   const messages = await sql`
-    SELECT m.id, m.conversation_id, m.sender_user_id, m.content, m.created_at,
+    SELECT m.id, m.conversation_id, m.sender_user_id, m.client_message_id,
+           m.content, m.created_at, m.delivered_at, m.read_at,
            u.nombre AS sender_name,
            (m.sender_user_id = ${userId}) AS is_mine
     FROM community_messages m
@@ -388,13 +537,5 @@ export async function readCommunityConversation(userId: number, conversationIdVa
     ORDER BY m.id ASC
     LIMIT 200
   `;
-  const lastId = Number(messages[messages.length - 1]?.id ?? 0);
-  if (lastId) {
-    await sql`
-      UPDATE community_conversation_members
-      SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), ${lastId})
-      WHERE conversation_id = ${conversationId} AND user_id = ${userId}
-    `;
-  }
   return messages;
 }

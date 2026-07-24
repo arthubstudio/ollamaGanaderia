@@ -17,6 +17,7 @@ import {
   sendCommunityMessage,
   sendFriendRequest
 } from "~/server/services/community";
+import { publishPersistedCommunityMessage } from "~/server/services/communityRealtime";
 import { resolveSingleUser, searchUsers } from "~/server/services/userDirectory";
 
 function requireSession(usuarioId?: number | null) {
@@ -159,6 +160,9 @@ export async function enviarMensaje(args: { usuario_destino: string; mensaje: st
   }
   const conversation = await getOrCreateDirectConversation(userId, recipient.user.id);
   const message = await sendCommunityMessage({ userId, conversationId: conversation.id, content: args.mensaje });
+  await publishPersistedCommunityMessage(message).catch((error) => {
+    console.error("No se pudo publicar el mensaje de IA por WebSocket:", error);
+  });
   return { ok: true as const, conversation, message, recipient: recipient.user };
 }
 

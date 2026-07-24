@@ -745,8 +745,11 @@ export const communityMessages = pgTable("community_messages", {
   conversation_id: uuid("conversation_id").notNull()
     .references(() => communityConversations.id),
   sender_user_id: integer("sender_user_id").notNull().references(() => usuarios.id),
+  client_message_id: varchar("client_message_id", { length: 100 }),
   content: text("content").notNull(),
   created_at: timestamp("created_at").defaultNow(),
+  delivered_at: timestamp("delivered_at"),
+  read_at: timestamp("read_at"),
   edited_at: timestamp("edited_at"),
   deleted_at: timestamp("deleted_at")
 });

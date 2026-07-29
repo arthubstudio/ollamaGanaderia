@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import { sql } from "~/lib/db";
 import { generarSiguienteArete } from "~/lib/areteService";
 import { rebuildBovinoContext } from "~/lib/rebuildBovinoContext";
 import { recordActivity } from "~/server/services/activityAudit";
-import { resolveTransferUser } from "~/server/services/userDirectory";
+import { maskEmail, resolveTransferUser } from "~/server/services/userDirectory";
 import { getRanchoOwnerIds, syncBovinoOwners } from "~/server/services/ownershipRelations";
 import { apiError, optionalId, optionalText, parseId } from "~/server/utils/api";
 
@@ -18,24 +19,31 @@ type TransferFailureReason =
   | "self_transfer"
   | "internal_error";
 
+function auditHash(value: unknown) {
+  const text = String(value ?? "").trim().toLowerCase();
+  return text ? createHash("sha256").update(text).digest("hex") : null;
+}
+
 async function transferFailure(input: {
   sourceUserId: number;
   bovinoId?: unknown;
   bovinoName?: unknown;
   destinationQuery?: unknown;
 }, reason: TransferFailureReason, error: string, extra: Record<string, unknown> = {}) {
+  const matches = Array.isArray(extra.matches) ? extra.matches.length : undefined;
   const metadata = {
     reason,
-    bovino_id: input.bovinoId ?? null,
-    bovino_name: String(input.bovinoName ?? "").trim() || null,
-    destination_query: String(input.destinationQuery ?? "").trim() || null,
-    ...extra
+    bovino_id_hash: auditHash(input.bovinoId),
+    bovino_name_hash: auditHash(input.bovinoName),
+    destination_query_hash: auditHash(input.destinationQuery),
+    destination_query_length: String(input.destinationQuery ?? "").trim().length,
+    ...(matches == null ? {} : { match_count: matches }),
+    ...(extra.pending_transfer ? { pending_transfer_exists: true } : {}),
+    ...(extra.validation_stage ? { validation_stage: String(extra.validation_stage).slice(0, 80) } : {}),
+    ...(extra.database_code ? { database_code: String(extra.database_code).slice(0, 30) } : {})
   };
 
-  console.warn("Solicitud de transferencia rechazada", {
-    source_user_id: input.sourceUserId,
-    ...metadata
-  });
+  console.warn("Solicitud de transferencia rechazada", metadata);
 
   try {
     await recordActivity({
@@ -48,7 +56,7 @@ async function transferFailure(input: {
   } catch (auditError) {
     console.error("No se pudo registrar el fallo de transferencia", {
       reason,
-      auditError
+      error_name: auditError instanceof Error ? auditError.name : "UnknownError"
     });
   }
 
@@ -224,9 +232,7 @@ export async function createBovinoTransfer(input: {
         durationMs: Date.now() - startedAt,
         metadata: {
           bovino_id: Number(bovino.id),
-          bovino_name: String(bovino.nombre),
           destination_user_id: destination.user.id,
-          destination_query: destinationQuery,
           destination_match: destination.user.match_type
         },
         client: tx
@@ -265,7 +271,7 @@ export async function listBovinoTransfers(userId: number, direction?: unknown, s
   const allowedStatus = new Set<TransferStatus>(["PENDING", "ACCEPTED", "REJECTED", "CANCELLED", "EXPIRED"]);
   const statusFilter = allowedStatus.has(requestedStatus as TransferStatus) ? requestedStatus : "";
 
-  return sql`
+  const rows = await sql`
     SELECT
       t.*,
       b.nombre AS bovino_nombre,
@@ -291,6 +297,12 @@ export async function listBovinoTransfers(userId: number, direction?: unknown, s
     ORDER BY t.requested_at DESC
     LIMIT 200
   `;
+
+  return rows.map((row: any) => ({
+    ...row,
+    source_user_email: maskEmail(row.source_user_email),
+    destination_user_email: maskEmail(row.destination_user_email)
+  }));
 }
 
 async function remapAppliedVaccines(tx: any, bovinoId: number, sourceUserId: number, destinationUserId: number) {
@@ -362,10 +374,6 @@ export async function acceptBovinoTransfer(userId: number, transferIdValue: unkn
     }
 
     await remapAppliedVaccines(tx, Number(bovino.id), Number(transfer.source_user_id), userId);
-    await tx`
-      UPDATE memories SET usuario_id = ${userId}, updated_at = NOW()
-      WHERE bovino_id = ${bovino.id} AND usuario_id = ${transfer.source_user_id}
-    `;
     await tx`
       UPDATE historial_propiedad
       SET fecha_fin = CURRENT_DATE
@@ -522,6 +530,13 @@ export const cancelBovinoTransfer = (userId: number, transferId: unknown) =>
 
 export async function getBovinoOwnershipTimeline(userId: number, bovinoIdValue: unknown) {
   const bovinoId = parseId(bovinoIdValue, "bovino_id");
+  const currentOwnerRows = await sql`
+    SELECT 1 AS owns
+    FROM bovinos
+    WHERE id = ${bovinoId} AND usuario_id = ${userId}
+    LIMIT 1
+  `;
+  const isCurrentOwner = currentOwnerRows.length > 0;
   const access = await sql`
     SELECT id FROM bovinos WHERE id = ${bovinoId} AND usuario_id = ${userId}
     UNION
@@ -534,9 +549,9 @@ export async function getBovinoOwnershipTimeline(userId: number, bovinoIdValue: 
     apiError({ statusCode: 404, code: "NOT_FOUND", message: "Historial no encontrado." });
   }
 
-  return sql`
+  const rows = await sql`
     SELECT
-      e.id, e.event_type, e.created_at, e.metadata,
+      e.id, e.event_type, e.created_at, (e.metadata - 'message') AS metadata,
       fu.nombre AS from_user_name, fu.email AS from_user_email,
       tu.nombre AS to_user_name, tu.email AS to_user_email,
       au.nombre AS actor_name,
@@ -547,6 +562,18 @@ export async function getBovinoOwnershipTimeline(userId: number, bovinoIdValue: 
     LEFT JOIN usuarios tu ON tu.id = e.to_user_id
     LEFT JOIN usuarios au ON au.id = e.actor_user_id
     WHERE e.bovino_id = ${bovinoId}
+      AND (
+        ${isCurrentOwner}
+        OR e.from_user_id = ${userId}
+        OR e.to_user_id = ${userId}
+        OR e.actor_user_id = ${userId}
+      )
     ORDER BY e.created_at ASC, e.id ASC
   `;
+
+  return rows.map((row: any) => ({
+    ...row,
+    from_user_email: maskEmail(row.from_user_email),
+    to_user_email: maskEmail(row.to_user_email)
+  }));
 }

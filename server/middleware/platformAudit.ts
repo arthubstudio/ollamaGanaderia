@@ -1,6 +1,7 @@
 import { getRequestPath } from "h3";
 import { recordActivity } from "~/server/services/activityAudit";
-import { getSessionUserId } from "~/server/utils/session";
+import { safeErrorDetails } from "~/server/utils/safeLogging";
+import { getSessionUserId, hydrateUserSession } from "~/server/utils/session";
 
 const PLATFORM_PREFIXES = [
   "/api/transfers",
@@ -10,11 +11,12 @@ const PLATFORM_PREFIXES = [
   "/api/community"
 ];
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const path = getRequestPath(event).split("?")[0];
   if (!PLATFORM_PREFIXES.some((prefix) => path.startsWith(prefix))) return;
 
   const startedAt = Date.now();
+  await hydrateUserSession(event);
   const userId = getSessionUserId(event);
   const method = String(event.method ?? "GET").toUpperCase();
 
@@ -28,7 +30,9 @@ export default defineEventHandler((event) => {
       success: statusCode < 400,
       durationMs: Date.now() - startedAt,
       metadata: { path, method, status_code: statusCode }
-    }).catch((error) => console.error("No se pudo registrar auditoria HTTP", error));
+    }).catch((error) => console.error(
+      "No se pudo registrar auditoria HTTP",
+      safeErrorDetails(error)
+    ));
   });
 });
-

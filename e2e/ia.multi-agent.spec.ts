@@ -1,8 +1,16 @@
 import { expect, test } from "@playwright/test";
 
 async function login(request: any) {
+  const stamp = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
+  const email = `multiagente.${stamp}@ganaderia.test`;
+  const password = "PruebaMulti123456";
+  const registration = await request.post("/api/auth/register", {
+    data: { nombre: `Multiagente ${stamp}`, email, password }
+  });
+  expect(registration.ok()).toBeTruthy();
+
   const response = await request.post("/api/auth/login", {
-    data: { email: "pedro@gmail.com", password: "123456" }
+    data: { email, password }
   });
   expect(response.ok()).toBeTruthy();
   return response.json();
@@ -85,4 +93,3 @@ test.describe("IA multiagente", () => {
     expect(body.route.agent).toBe("direct");
   });
 });
-

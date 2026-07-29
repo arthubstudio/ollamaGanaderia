@@ -1,3 +1,8 @@
+import {
+  detectCapabilityIntent
+} from "~/lib/iaCapabilities";
+import { normalizeIaText } from "~/lib/iaLanguageNormalizer.js";
+
 export type AgentName = "rag" | "transactional" | "direct";
 
 export type AgentRoute = {
@@ -12,19 +17,10 @@ type RecentMessage = {
   content: string;
 };
 
-function normalize(value: string) {
-  return String(value ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const WRITE_PATTERN = /\b(crea|crear|registra|registrar|registrale|agrega|agregar|agregale|aplica|aplicar|aplicale|vacuna|vacunar|vacunale|actualiza|actualizar|actualizale|modifica|modificar|cambia|cambiar|cambiale|transfiere|transfiera|transferir|manda|mandar|mandale|envia|enviar|enviale|pasa|pasar|traspasa|traspasar|acepta|aceptar|rechaza|rechazar|cancela|cancelar|asigna|asignar|elimina|eliminar|borra|borrar|quita|quitar|anota|anotar|anotale|ponle)\b/;
+const WRITE_PATTERN = /\b(crea|crear|registra|registrar|registrale|agrega|agregar|agregale|anade|anadir|aplica|aplicar|aplicale|vacunar|vacunale|actualiza|actualizar|actualizale|modifica|modificar|cambia|cambiar|cambiale|transfiere|transfiera|transferir|manda|mandar|mandale|envia|enviar|enviale|pasa|pasar|traspasa|traspasar|acepta|aceptar|rechaza|rechazar|cancela|cancelar|asigna|asignar|elimina|eliminar|borra|borrar|quita|quitar|anota|anotar|anotale|ponle|captura|capturar|da de alta|dar de alta)\b/;
 const DATA_TARGET_PATTERN = /\b(bovino|bovinos|vaca|vacas|toro|toros|ganado|peso|pesos|vacuna|vacunas|vacunacion|enfermedad|enfermedades|brucelosis|clostridial|clostridiales|respiratorio|salud|nutricion|alimentacion|bioseguridad|rancho|ranchos|dueno|duenos|arete|venta|ventas|propiedad|historial|transferencia|transferencias|usuario|usuarios|raza|razas|contacto|contactos|amigo|amigos|amistad|mensaje|mensajes|conversacion|conversaciones|notificacion|notificaciones)\b/;
-const DATABASE_QUERY_PATTERN = /\b(cuantos|cuantas|lista|listar|enlista|dame|disponibles|registradas|muestra|muestrame|tengo|tiene|pesa|peso de|vacunas de|enfermedades de|estado de|historial de|busca|buscar|arete|listo para venta|lista para venta|recibidos|enviados|conversaciones|contactos|razas)\b/;
-const KNOWLEDGE_PATTERN = /\b(que es|que son|como funciona|como prevenir|como tratar|explica|explicame|recomendaciones|manejo|sintomas|causas|cuidados|salud|nutricion|alimentacion|calendario|por que|para que sirve|buenas practicas)\b/;
+const DATABASE_QUERY_PATTERN = /\b(cuantos|cuantas|lista|listar|enlista|dame|disponibles|registradas|muestra|muestrame|tengo|tiene|pesa|peso de|vacunas de|enfermedades de|estado de|historial de|busca|buscar|consulta|consultar|ver|arete|listo para venta|lista para venta|recibidos|enviados|conversaciones|contactos|razas)\b/;
+const KNOWLEDGE_PATTERN = /\b(que es|que son|que significa|como funciona|como prevenir|como tratar|explica|explicame|recomendaciones|manejo|sintomas|causas|cuidados|salud|nutricion|alimentacion|calendario|por que|para que sirve|buenas practicas|informacion general)\b/;
 const MEMORY_QUERY_PATTERN = /\b(que recuerdas|que sabes de mi|mis memorias|mi preferencia|recuerdas de mi)\b/;
 const MEMORY_WRITE_PATTERN = /^(recuerda(?: que)?|soy |me llamo |vivo en |trabajo en |me gusta |no me gusta |prefiero |mi .+ es )/;
 const DIRECT_PATTERN = /^(hola|buenos dias|buenas tardes|buenas noches|gracias|adios|hasta luego|ayuda|que puedes hacer)[!.? ]*$/;
@@ -33,7 +29,7 @@ export function routeIaMessage(
   message: string,
   recentMessages: RecentMessage[] = []
 ): AgentRoute {
-  const text = normalize(message);
+  const text = normalizeIaText(message);
 
   if (!text) {
     return {
@@ -41,6 +37,21 @@ export function routeIaMessage(
       intent: "empty_message",
       confidence: 1,
       reason: "El mensaje no contiene texto util."
+    };
+  }
+
+  const capabilityIntent = detectCapabilityIntent(message);
+  if (capabilityIntent) {
+    return {
+      agent: "direct",
+      intent:
+        capabilityIntent.kind === "system"
+          ? "system_capabilities"
+          : capabilityIntent.kind === "module"
+            ? "module_capabilities"
+            : "capability_clarification",
+      confidence: capabilityIntent.confidence,
+      reason: capabilityIntent.reason
     };
   }
 
@@ -100,7 +111,7 @@ export function routeIaMessage(
     };
   }
 
-  const contextText = normalize(
+  const contextText = normalizeIaText(
     recentMessages.slice(-4).map((item) => item.content).join(" ")
   );
   const contextualReference = /\b(eso|esa|ese|ella|el anterior|lo anterior|dime mas|y por que|y como)\b/.test(text);
@@ -125,8 +136,8 @@ export function routeIaMessage(
 
   return {
     agent: "direct",
-    intent: "out_of_domain",
-    confidence: 0.9,
-    reason: "No se detecto una intencion ganadera ni transaccional."
+    intent: "clarification_needed",
+    confidence: 0.75,
+    reason: "No se detecto una intencion suficientemente clara para actuar."
   };
 }

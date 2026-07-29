@@ -1,0 +1,15 @@
+========================================
+AUDITORÍA DE SEGURIDAD — GANADERÍA AI
+========================================
+PUNTUACIÓN FINAL: 62/100
+NIVEL: Regular
+CRÍTICOS: 0
+ALTOS: 2
+MEDIOS: 14
+BAJOS: 6
+INFORMATIVOS: 2
+PRUEBAS EJECUTADAS: 161
+HALLAZGOS CONFIRMADOS: 21
+REPORTE:
+security-audit/SECURITY_AUDIT_GANADERIA.md
+========================================

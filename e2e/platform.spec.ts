@@ -9,10 +9,18 @@ test.describe("plataforma ganadera entre cuentas", () => {
     const emailD = `user2.${stamp}@ganaderia.test`;
     const uniqueUsername = `user2${stamp}`;
     const password = "Prueba123456";
-    const source = await playwrightRequest.newContext({ baseURL });
-    const destination = await playwrightRequest.newContext({ baseURL });
-    const duplicateDestination = await playwrightRequest.newContext({ baseURL });
-    const uniqueDestination = await playwrightRequest.newContext({ baseURL });
+    const stampHex = stamp.toString(16).padStart(12, "0").slice(-12);
+    const requestOptions = {
+      baseURL,
+      extraHTTPHeaders: {
+        Origin: String(baseURL),
+        "CF-Connecting-IP": `2001:db8:10:${stampHex.slice(0, 4)}:${stampHex.slice(4, 8)}:${stampHex.slice(8, 12)}::1`
+      }
+    };
+    const source = await playwrightRequest.newContext(requestOptions);
+    const destination = await playwrightRequest.newContext(requestOptions);
+    const duplicateDestination = await playwrightRequest.newContext(requestOptions);
+    const uniqueDestination = await playwrightRequest.newContext(requestOptions);
 
     const registerA = await source.post("/api/auth/register", { data: { nombre: `Origen ${stamp}`, email: emailA, password } });
     const registerB = await destination.post("/api/auth/register", { data: { nombre: `Destino ${stamp}`, email: emailB, password } });
@@ -22,10 +30,12 @@ test.describe("plataforma ganadera entre cuentas", () => {
     expect(registerB.ok()).toBeTruthy();
     expect(registerC.ok()).toBeTruthy();
     expect(registerD.ok()).toBeTruthy();
-    const userA = await registerA.json();
-    const userB = await registerB.json();
-    expect((await source.post("/api/auth/login", { data: { email: emailA, password } })).ok()).toBeTruthy();
-    expect((await destination.post("/api/auth/login", { data: { email: emailB, password } })).ok()).toBeTruthy();
+    const loginA = await source.post("/api/auth/login", { data: { email: emailA, password } });
+    const loginB = await destination.post("/api/auth/login", { data: { email: emailB, password } });
+    expect(loginA.ok()).toBeTruthy();
+    expect(loginB.ok()).toBeTruthy();
+    const userA = await loginA.json();
+    const userB = await loginB.json();
 
     const breedResponse = await source.post("/api/breeds", {
       data: { nombre: `Raza Prueba ${stamp}`, tipo: "carne", pais_origen: "Mexico" }
@@ -60,47 +70,60 @@ test.describe("plataforma ganadera entre cuentas", () => {
       data: { bovino_id: bovino.id, nombre: `Revision E2E ${stamp}`, fecha: "2026-07-19" }
     })).ok()).toBeTruthy();
 
-    const iaMissingRecipientResponse = await source.post("/api/ia/function-calling", {
-      data: { pregunta: `Transfiere la vaca ${bovino.nombre} a zzqvusuarioimposible` }
-    });
-    expect(iaMissingRecipientResponse.ok()).toBeTruthy();
-    const iaMissingRecipient = await iaMissingRecipientResponse.json();
-    expect(iaMissingRecipient.tool).toBe("crearSolicitudTransferencia");
-    expect(iaMissingRecipient.resultado).toMatchObject({ ok: false, reason: "user_not_found" });
+    const runConfirmedIaAction = async (pregunta: string) => {
+      const conversationResponse = await source.post("/api/conversations/create");
+      expect(conversationResponse.ok()).toBeTruthy();
+      const conversation = await conversationResponse.json();
+      const proposalResponse = await source.post("/api/ia/router", {
+        data: {
+          pregunta,
+          conversation_id: conversation.conversation_id,
+          stream: false
+        }
+      });
+      expect(proposalResponse.ok()).toBeTruthy();
+      expect((await proposalResponse.json()).answer).toMatch(/confirmas/i);
+      const confirmationResponse = await source.post("/api/ia/router", {
+        data: {
+          pregunta: "Si",
+          conversation_id: conversation.conversation_id,
+          stream: false
+        }
+      });
+      expect(confirmationResponse.ok()).toBeTruthy();
+      return confirmationResponse.json();
+    };
+
+    const iaMissingRecipient = await runConfirmedIaAction(
+      `Transfiere la vaca ${bovino.nombre} a zzqvusuarioimposible`
+    );
     expect(iaMissingRecipient.answer).toMatch(/usuario destino no encontrado/i);
 
-    const iaAmbiguousRecipientResponse = await source.post("/api/ia/function-calling", {
-      data: { pregunta: `Transfiere la vaca ${bovino.nombre} al usuario Destino ${stamp}` }
-    });
-    expect(iaAmbiguousRecipientResponse.ok()).toBeTruthy();
-    const iaAmbiguousRecipient = await iaAmbiguousRecipientResponse.json();
-    expect(iaAmbiguousRecipient.tool).toBe("crearSolicitudTransferencia");
-    expect(iaAmbiguousRecipient.resultado).toMatchObject({ ok: false, reason: "ambiguous_user" });
+    const iaAmbiguousRecipient = await runConfirmedIaAction(
+      `Transfiere la vaca ${bovino.nombre} al usuario Destino ${stamp}`
+    );
     expect(iaAmbiguousRecipient.answer).toMatch(/correo electronico.*correcto/i);
 
-    const iaSelfTransferResponse = await source.post("/api/ia/function-calling", {
-      data: { pregunta: `Quiero que transfiera el bovino ${bovino.nombre} a ${emailA}` }
-    });
-    const iaSelfTransfer = await iaSelfTransferResponse.json();
-    expect(iaSelfTransfer.resultado).toMatchObject({ ok: false, reason: "self_transfer" });
+    const iaSelfTransfer = await runConfirmedIaAction(
+      `Quiero que transfiera el bovino ${bovino.nombre} a ${emailA}`
+    );
     expect(iaSelfTransfer.answer).toMatch(/tu propia cuenta/i);
 
-    const iaMissingBovinoResponse = await source.post("/api/ia/function-calling", {
-      data: { pregunta: `Quiero que transfiera el bovino Inexistente${stamp} a ${emailD}` }
-    });
-    const iaMissingBovino = await iaMissingBovinoResponse.json();
-    expect(iaMissingBovino.resultado).toMatchObject({ ok: false, reason: "bovino_not_found" });
+    const iaMissingBovino = await runConfirmedIaAction(
+      `Quiero que transfiera el bovino Inexistente${stamp} a ${emailD}`
+    );
     expect(iaMissingBovino.answer).toMatch(/bovino no encontrado/i);
 
-    const usernameTransferResponse = await source.post("/api/ia/function-calling", {
-      data: { pregunta: `Quiero que transfiera el bovino ${bovino.nombre} a ${uniqueUsername}` }
-    });
-    expect(usernameTransferResponse.ok()).toBeTruthy();
-    const usernameTransfer = await usernameTransferResponse.json();
-    expect(usernameTransfer.tool).toBe("crearSolicitudTransferencia");
-    expect(usernameTransfer.resultado).toMatchObject({ ok: true });
+    const usernameTransfer = await runConfirmedIaAction(
+      `Quiero que transfiera el bovino ${bovino.nombre} a ${uniqueUsername}`
+    );
     expect(usernameTransfer.answer).toMatch(/solicitud de transferencia enviada/i);
-    expect((await source.post(`/api/transfers/${usernameTransfer.resultado.transfer.id}/cancel`)).ok()).toBeTruthy();
+    const usernameTransfers = await (await source.get("/api/transfers?direction=sent&status=PENDING")).json();
+    const usernameTransferRecord = usernameTransfers.find(
+      (item: any) => Number(item.bovino_id) === Number(bovino.id)
+    );
+    expect(usernameTransferRecord).toBeTruthy();
+    expect((await source.post(`/api/transfers/${usernameTransferRecord.id}/cancel`)).ok()).toBeTruthy();
 
     const aiConversationResponse = await source.post("/api/conversations/create");
     expect(aiConversationResponse.ok()).toBeTruthy();
@@ -125,18 +148,17 @@ test.describe("plataforma ganadera entre cuentas", () => {
     const confirmedTransfer = await confirmedTransferResponse.json();
     expect(confirmedTransfer.answer).toMatch(/solicitud de transferencia enviada/i);
     expect(confirmedTransfer.answer).toContain(bovino.nombre);
-    expect(confirmedTransfer.answer).toContain(emailB);
+    expect(confirmedTransfer.answer).not.toContain(emailB);
+    expect(confirmedTransfer.answer).toMatch(/de\*+@ganaderia\.test/i);
 
     const pendingTransfers = await (await source.get("/api/transfers?direction=sent&status=PENDING")).json();
     const transfer = pendingTransfers.find((item: any) => Number(item.bovino_id) === Number(bovino.id));
     expect(transfer).toBeTruthy();
     const transferResult = { transfer };
 
-    const duplicatePendingResponse = await source.post("/api/ia/function-calling", {
-      data: { pregunta: `Quiero que transfiera el bovino ${bovino.nombre} a ${emailB}` }
-    });
-    const duplicatePending = await duplicatePendingResponse.json();
-    expect(duplicatePending.resultado).toMatchObject({ ok: false, reason: "pending_exists" });
+    const duplicatePending = await runConfirmedIaAction(
+      `Quiero que transfiera el bovino ${bovino.nombre} a ${emailB}`
+    );
     expect(duplicatePending.answer).toMatch(/solicitud pendiente/i);
 
     const sourceBovinosWhilePending = await (await source.get("/api/bovinos")).json();
@@ -229,16 +251,20 @@ test.describe("plataforma ganadera entre cuentas", () => {
     await destinationPage.reload();
     await expect(destinationPage.getByText(finalWeightText ?? "", { exact: true })).toHaveCount(1);
 
-    const notifications = await (await destination.get("/api/notifications")).json();
+    const notifications = await (await destinationBrowser.request.get("/api/notifications")).json();
     expect(notifications.items.some((item: any) => item.type === "BOVINO_TRANSFER_REQUEST")).toBe(true);
 
-    const iaResponse = await destination.post("/api/ia/router", { data: { pregunta: "Que razas tienes?", stream: false } });
+    const iaResponse = await destinationBrowser.request.post("/api/ia/router", {
+      headers: { Origin: String(baseURL) },
+      data: { pregunta: "Que razas tienes?", stream: false }
+    });
     expect(iaResponse.ok()).toBeTruthy();
     const iaPayload = await iaResponse.json();
     expect(iaPayload.answer).toContain("Catalogo de Razas");
     expect(iaPayload.respuesta).toBe(iaPayload.answer);
 
-    const streamedIa = await destination.post("/api/ia/router", {
+    const streamedIa = await destinationBrowser.request.post("/api/ia/router", {
+      headers: { Origin: String(baseURL) },
       data: { pregunta: `Registra 410 kg a ${bovino.nombre}`, stream: true }
     });
     expect(streamedIa.ok()).toBeTruthy();

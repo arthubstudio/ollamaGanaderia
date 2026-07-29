@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-07-29T17:18:15Z",
+  "automated_assertions": {
+    "repository_unit_tests": { "executed": 59, "pass": 59, "fail": 0 },
+    "dynamic_security_controls": { "executed": 60, "pass": 43, "fail": 17, "error": 0 },
+    "websocket_security_controls": { "executed": 7, "pass": 7, "fail": 0 },
+    "cloudflare_tunnel_controls": { "executed": 18, "pass": 13, "fail": 5, "error": 0 }
+  },
+  "instrumental_checks": {
+    "executed": 17,
+    "typescript_scripts": "pass",
+    "nuxt_production_build": "pass",
+    "project_compose_config": "pass",
+    "audit_compose_config": "pass",
+    "public_source_maps": 0,
+    "endpoint_surfaces": 122,
+    "fresh_seed_without_audit_shim": "fail_duplicate_primary_key",
+    "npm_audit_all": { "total": 9, "critical": 1, "high": 4, "moderate": 4, "low": 0 },
+    "npm_audit_production": { "total": 6, "critical": 1, "high": 4, "moderate": 0, "low": 1 }
+  },
+  "total_checks_counted": 161,
+  "secrets_redacted": true,
+  "production_contacted": false,
+  "authorized_public_tunnel_contacted": true,
+  "authorized_public_host": "reviewing-outcome-barn-andrews.trycloudflare.com"
+}

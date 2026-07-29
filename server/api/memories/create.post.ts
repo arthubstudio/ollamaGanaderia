@@ -1,14 +1,8 @@
-import postgres from "postgres";
+import { sql } from "~/lib/db";
 import { generarEmbeddingSafe } from "~/lib/embeddings";
 import { memoryConfirmation } from "~/lib/iaMemoryPerspective.js";
+import { apiError } from "~/server/utils/api";
 import { requireUserId } from "~/server/utils/session";
-
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
-);
 
 type CreateMemoryBody = {
   usuario_id?: string | number | null;
@@ -216,6 +210,14 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: "Falta contenido"
+    });
+  }
+
+  if (contenido.length > 5000) {
+    apiError({
+      statusCode: 400,
+      code: "FIELD_TOO_LONG",
+      message: "La memoria supera 5000 caracteres."
     });
   }
 

@@ -1,4 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =====================================================
 -- USUARIOS
@@ -8,9 +9,14 @@ CREATE TABLE usuarios (
     nombre VARCHAR(100) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    rol VARCHAR(50) DEFAULT 'empleado',
+    rol VARCHAR(50) NOT NULL DEFAULT 'usuario',
+    directory_key UUID NOT NULL DEFAULT gen_random_uuid(),
+    security_locked_at TIMESTAMPTZ,
+    password_changed_at TIMESTAMPTZ,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX usuarios_directory_key_uq ON usuarios(directory_key);
 
 -- =====================================================
 -- BOVINOS
@@ -36,6 +42,20 @@ CREATE TABLE bovino_arete_sequences (
     last_value INT NOT NULL CHECK (last_value >= 0),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE auth_sessions (
+    id_hash CHAR(64) PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    user_agent_hash CHAR(64)
+);
+
+CREATE INDEX auth_sessions_user_active_idx
+ON auth_sessions (user_id, expires_at)
+WHERE revoked_at IS NULL;
 
 -- =====================================================
 -- DUEÑOS
@@ -116,7 +136,7 @@ CREATE INDEX vacuna_aplicada_vacuna_id_idx ON vacuna_aplicada(vacuna_id);
 CREATE TABLE pesos (
     id SERIAL PRIMARY KEY,
     bovino_id INT REFERENCES bovinos(id),
-    peso DECIMAL(10,2),
+    peso DECIMAL(10,2) CHECK (peso > 0 AND peso <= 2500),
     fecha DATE,
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -157,6 +177,10 @@ CREATE INDEX ventas_bovino_id_idx ON ventas(bovino_id);
 CREATE TABLE semantic_contexts (
     id SERIAL PRIMARY KEY,
     bovino_id INT REFERENCES bovinos(id),
+    owner_user_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+    scope VARCHAR(20) NOT NULL DEFAULT 'private' CHECK (scope IN ('private', 'public')),
+    source VARCHAR(80) NOT NULL DEFAULT 'unknown',
+    trusted BOOLEAN NOT NULL DEFAULT FALSE,
     contenido TEXT NOT NULL,
     embedding vector(768),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -183,3 +207,17 @@ VALUES
 ('Rabia'),
 ('Clostridiales'),
 ('Complejo Respiratorio');
+
+-- =====================================================
+-- RATE LIMITING PERSISTENTE
+-- =====================================================
+CREATE TABLE IF NOT EXISTS security_rate_limits (
+    key_hash VARCHAR(160) PRIMARY KEY,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS security_rate_limits_expires_idx
+ON security_rate_limits (expires_at);

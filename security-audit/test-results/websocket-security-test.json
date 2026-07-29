@@ -1,0 +1,66 @@
+{
+  "title": "Local WebSocket security and reliability test",
+  "generated_at": "2026-07-29T08:31:23.377Z",
+  "target": "ws://127.0.0.1:3201/_ws/community",
+  "tests": [
+    {
+      "id": "WS-001",
+      "status": "PASS",
+      "evidence": {
+        "all_authenticated_connections_ready": true
+      }
+    },
+    {
+      "id": "WS-002",
+      "status": "PASS",
+      "evidence": {
+        "sender_received_immediately": true,
+        "receiver_received_without_reload": true,
+        "same_message_id": true
+      }
+    },
+    {
+      "id": "WS-003",
+      "status": "PASS",
+      "evidence": {
+        "delivery_status_received": true
+      }
+    },
+    {
+      "id": "WS-004",
+      "status": "PASS",
+      "evidence": {
+        "persisted_rows_for_client_message_id": 1
+      }
+    },
+    {
+      "id": "WS-005",
+      "status": "PASS",
+      "evidence": {
+        "outsider_received_error": true,
+        "outsider_message_persisted": false,
+        "public_error_code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "WS-006",
+      "status": "PASS",
+      "evidence": {
+        "read_status_received_by_sender": true
+      }
+    },
+    {
+      "id": "WS-007",
+      "status": "PASS",
+      "evidence": {
+        "sender_received_offline_message": true,
+        "receiver_recovered_after_reconnect": true
+      }
+    }
+  ],
+  "totals": {
+    "executed": 7,
+    "pass": 7,
+    "fail": 0
+  }
+}

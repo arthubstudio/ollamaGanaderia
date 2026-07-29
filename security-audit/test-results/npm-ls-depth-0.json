@@ -1,0 +1,132 @@
+{
+  "name": "app",
+  "problems": [
+    "extraneous: @emnapi/core@1.11.1 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@emnapi\\core",
+    "extraneous: @emnapi/runtime@1.11.1 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@emnapi\\runtime",
+    "extraneous: @emnapi/wasi-threads@1.2.2 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@emnapi\\wasi-threads",
+    "extraneous: @napi-rs/wasm-runtime@1.1.5 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@napi-rs\\wasm-runtime",
+    "extraneous: @tybys/wasm-util@0.10.2 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@tybys\\wasm-util"
+  ],
+  "dependencies": {
+    "@emnapi/core": {
+      "version": "1.11.1",
+      "resolved": "https://registry.npmjs.org/@emnapi/core/-/core-1.11.1.tgz",
+      "overridden": false,
+      "extraneous": true,
+      "problems": [
+        "extraneous: @emnapi/core@1.11.1 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@emnapi\\core"
+      ]
+    },
+    "@emnapi/runtime": {
+      "version": "1.11.1",
+      "resolved": "https://registry.npmjs.org/@emnapi/runtime/-/runtime-1.11.1.tgz",
+      "overridden": false,
+      "extraneous": true,
+      "problems": [
+        "extraneous: @emnapi/runtime@1.11.1 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@emnapi\\runtime"
+      ]
+    },
+    "@emnapi/wasi-threads": {
+      "version": "1.2.2",
+      "resolved": "https://registry.npmjs.org/@emnapi/wasi-threads/-/wasi-threads-1.2.2.tgz",
+      "overridden": false,
+      "extraneous": true,
+      "problems": [
+        "extraneous: @emnapi/wasi-threads@1.2.2 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@emnapi\\wasi-threads"
+      ]
+    },
+    "@napi-rs/wasm-runtime": {
+      "version": "1.1.5",
+      "resolved": "https://registry.npmjs.org/@napi-rs/wasm-runtime/-/wasm-runtime-1.1.5.tgz",
+      "overridden": false,
+      "extraneous": true,
+      "problems": [
+        "extraneous: @napi-rs/wasm-runtime@1.1.5 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@napi-rs\\wasm-runtime"
+      ]
+    },
+    "@nuxt/icon": {
+      "version": "2.2.3",
+      "resolved": "https://registry.npmjs.org/@nuxt/icon/-/icon-2.2.3.tgz",
+      "overridden": false
+    },
+    "@nuxtjs/tailwindcss": {
+      "version": "6.14.0",
+      "resolved": "https://registry.npmjs.org/@nuxtjs/tailwindcss/-/tailwindcss-6.14.0.tgz",
+      "overridden": false
+    },
+    "@playwright/test": {
+      "version": "1.61.1",
+      "resolved": "https://registry.npmjs.org/@playwright/test/-/test-1.61.1.tgz",
+      "overridden": false
+    },
+    "@tybys/wasm-util": {
+      "version": "0.10.2",
+      "resolved": "https://registry.npmjs.org/@tybys/wasm-util/-/wasm-util-0.10.2.tgz",
+      "overridden": false,
+      "extraneous": true,
+      "problems": [
+        "extraneous: @tybys/wasm-util@0.10.2 C:\\Users\\hugoa\\Music\\ganaderia_ai\\app\\node_modules\\@tybys\\wasm-util"
+      ]
+    },
+    "@types/node": {
+      "version": "26.0.1",
+      "resolved": "https://registry.npmjs.org/@types/node/-/node-26.0.1.tgz",
+      "overridden": false
+    },
+    "@types/pdfkit": {
+      "version": "0.17.6",
+      "resolved": "https://registry.npmjs.org/@types/pdfkit/-/pdfkit-0.17.6.tgz",
+      "overridden": false
+    },
+    "drizzle-kit": {
+      "version": "0.31.10",
+      "resolved": "https://registry.npmjs.org/drizzle-kit/-/drizzle-kit-0.31.10.tgz",
+      "overridden": false
+    },
+    "drizzle-orm": {
+      "version": "0.45.2",
+      "resolved": "https://registry.npmjs.org/drizzle-orm/-/drizzle-orm-0.45.2.tgz",
+      "overridden": false
+    },
+    "nuxt": {
+      "version": "4.4.8",
+      "resolved": "https://registry.npmjs.org/nuxt/-/nuxt-4.4.8.tgz",
+      "overridden": false
+    },
+    "ollama": {
+      "version": "0.6.3",
+      "resolved": "https://registry.npmjs.org/ollama/-/ollama-0.6.3.tgz",
+      "overridden": false
+    },
+    "pdfkit": {
+      "version": "0.19.1",
+      "resolved": "https://registry.npmjs.org/pdfkit/-/pdfkit-0.19.1.tgz",
+      "overridden": false
+    },
+    "pgvector": {
+      "version": "0.2.1",
+      "resolved": "https://registry.npmjs.org/pgvector/-/pgvector-0.2.1.tgz",
+      "overridden": false
+    },
+    "postgres": {
+      "version": "3.4.9",
+      "resolved": "https://registry.npmjs.org/postgres/-/postgres-3.4.9.tgz",
+      "overridden": false
+    },
+    "tsx": {
+      "version": "4.23.1",
+      "resolved": "https://registry.npmjs.org/tsx/-/tsx-4.23.1.tgz",
+      "overridden": false
+    },
+    "typescript": {
+      "version": "7.0.2",
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz",
+      "overridden": false
+    },
+    "vue": {
+      "version": "3.5.38",
+      "resolved": "https://registry.npmjs.org/vue/-/vue-3.5.38.tgz",
+      "overridden": false
+    }
+  }
+}

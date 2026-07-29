@@ -211,6 +211,7 @@ async function postJson<T>(baseUrl: string, pathname: string, body: unknown, coo
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Origin: new URL(baseUrl).origin,
       ...(cookie ? { Cookie: cookie } : {})
     },
     body: JSON.stringify(body)
@@ -336,8 +337,13 @@ async function writePdf(filePath: string, report: any) {
 }
 
 const baseUrl = (process.env.EVAL_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
-const email = process.env.EVAL_EMAIL ?? "pedro@gmail.com";
-const password = process.env.EVAL_PASSWORD ?? "123456";
+const email = String(process.env.EVAL_EMAIL ?? "").trim();
+const password = String(process.env.EVAL_PASSWORD ?? "");
+if (!email || !password) {
+  throw new Error(
+    "Configura EVAL_EMAIL y EVAL_PASSWORD con una cuenta de prueba propia antes de evaluar."
+  );
+}
 const mainModel = process.env.CHAT_MODEL ?? "llama3.2:latest";
 const judgeModel = process.env.JUDGE_MODEL ?? "llama3.2:latest";
 const limit = Number(argumentValue("limit") ?? cases.length);
@@ -415,8 +421,11 @@ for (const testCase of selectedCases) {
   }
 }
 
-const db = postgres(process.env.DATABASE_URL ??
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai", { prepare: false, max: 1 });
+const databaseUrl = process.env.DATABASE_URL?.trim();
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL es obligatoria para ejecutar evaluate:agent.");
+}
+const db = postgres(databaseUrl, { prepare: false, max: 1 });
 let database: Record<string, number> = { total: 0 };
 try {
   const rows = await db`

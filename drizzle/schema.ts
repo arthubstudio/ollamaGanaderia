@@ -13,6 +13,7 @@ import {
   bigint,
   bigserial,
   jsonb,
+  char,
   primaryKey
 } from "drizzle-orm/pg-core";
 
@@ -67,7 +68,12 @@ export const aiLogs = pgTable(
     reranked_count: integer("reranked_count").default(0),
     reranker_used: integer("reranker_used").default(0),
     retrieval_latency_ms: integer("retrieval_latency_ms").default(0),
-    rerank_latency_ms: integer("rerank_latency_ms").default(0)
+    rerank_latency_ms: integer("rerank_latency_ms").default(0),
+    prompt_hash: char("prompt_hash", { length: 64 }),
+    response_hash: char("response_hash", { length: 64 }),
+    prompt_length: integer("prompt_length"),
+    response_length: integer("response_length"),
+    retention_until: timestamp("retention_until", { withTimezone: true })
   }
 );
 
@@ -106,6 +112,12 @@ export const usuarios = pgTable(
       "rol",
       { length: 50 }
     ),
+
+    directory_key: uuid("directory_key").notNull().defaultRandom(),
+
+    security_locked_at: timestamp("security_locked_at", { withTimezone: true }),
+
+    password_changed_at: timestamp("password_changed_at", { withTimezone: true }),
 
     created_at: timestamp(
       "created_at"
@@ -242,6 +254,16 @@ export const bovinos = pgTable(
 
   }
 );
+
+export const authSessions = pgTable("auth_sessions", {
+  id_hash: char("id_hash", { length: 64 }).primaryKey(),
+  user_id: integer("user_id").notNull().references(() => usuarios.id),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revoked_at: timestamp("revoked_at", { withTimezone: true }),
+  last_seen_at: timestamp("last_seen_at", { withTimezone: true }).defaultNow(),
+  user_agent_hash: char("user_agent_hash", { length: 64 })
+});
 
 export const bovinoAreteSequences = pgTable(
   "bovino_arete_sequences",
@@ -591,6 +613,15 @@ export const semanticContexts =
         "bovino_id"
       ),
 
+      owner_user_id: integer("owner_user_id")
+        .references(() => usuarios.id),
+
+      scope: varchar("scope", { length: 20 }).notNull().default("private"),
+
+      source: varchar("source", { length: 80 }).notNull().default("unknown"),
+
+      trusted: boolean("trusted").notNull().default(false),
+
       contenido: text(
         "contenido"
       ),
@@ -649,7 +680,9 @@ export const semanticContexts =
 
       updated_at: timestamp(
         "updated_at"
-      )
+      ),
+
+      transferable: boolean("transferable").notNull().default(false)
 
     }
   );
@@ -764,4 +797,12 @@ export const activityAuditLogs = pgTable("activity_audit_logs", {
   duration_ms: integer("duration_ms"),
   metadata: jsonb("metadata").notNull().default({}),
   created_at: timestamp("created_at").defaultNow()
+});
+
+export const securityRateLimits = pgTable("security_rate_limits", {
+  key_hash: varchar("key_hash", { length: 160 }).primaryKey(),
+  request_count: integer("request_count").notNull().default(0),
+  window_started_at: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+  expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });

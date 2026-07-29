@@ -23,7 +23,7 @@ watch(search, (value) => {
   if (selected.value && value === selectedLabel) return;
   selected.value = null;
   const version = ++searchVersion;
-  if (value.trim().length < 2) {
+  if (value.trim().length < 3) {
     matches.value = [];
     searchLoading.value = false;
     return;
@@ -56,7 +56,7 @@ async function sendRequest() {
   try {
     const result: any = await $fetch("/api/community/friends/requests", {
       method: "POST",
-      body: { usuario_destino: selected.value.email, message: message.value }
+      body: { usuario_destino: selected.value.recipient_key, message: message.value }
     });
     feedback.value = result.autoAccepted ? "Ahora son contactos." : "Solicitud enviada.";
     search.value = ""; message.value = ""; matches.value = []; selected.value = null;

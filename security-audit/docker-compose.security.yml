@@ -1,0 +1,30 @@
+services:
+  postgres-security:
+    image: pgvector/pgvector:pg16
+    pull_policy: never
+    container_name: ganaderia_security_db
+    environment:
+      POSTGRES_USER: ${SECURITY_DB_USER:?Define SECURITY_DB_USER}
+      POSTGRES_PASSWORD: ${SECURITY_DB_PASSWORD:?Define SECURITY_DB_PASSWORD}
+      POSTGRES_DB: ${SECURITY_DB_NAME:-ganaderia_ai_security_test}
+    ports:
+      - "127.0.0.1:${SECURITY_DB_PORT:-55433}:5432"
+    volumes:
+      - security_postgres_data:/var/lib/postgresql/data
+      - ../database/seeds.sql:/audit-source/001-seeds.sql:ro
+      - ../database/migrations/004_comunidad_transferencias_razas.sql:/audit-source/004-platform.sql:ro
+      - ../database/migrations/005_vacunacion_relaciones_venta.sql:/audit-source/005-relations.sql:ro
+      - ../database/migrations/006_chat_websocket.sql:/audit-source/006-websocket.sql:ro
+      - ../database/migrations/007_security_hardening.sql:/audit-source/007-security.sql:ro
+      - ./scripts/reset-security-data.sql:/audit-source/900-reset-security-data.sql:ro
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+
+volumes:
+  security_postgres_data:

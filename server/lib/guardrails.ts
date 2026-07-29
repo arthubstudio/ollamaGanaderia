@@ -7,6 +7,8 @@ const blockedPatterns = [
   "ignora las instrucciones anteriores",
   "ignora las instrucciones",
   "olvida tus instrucciones",
+  "ignora todo lo que",
+  "olvida todo lo que",
   "forget your instructions",
   "system prompt",
   "revela tu system prompt",
@@ -18,6 +20,10 @@ const blockedPatterns = [
   "developer mode",
   "jailbreak",
   "act as",
+  "actua como",
+  "actue como",
+  "comportate como",
+  "finge ser",
   "asume el rol de",
   "assume the role of",
   "dan mode",
@@ -34,6 +40,17 @@ const blockedPatterns = [
   "select * from",
   "drop table",
   "alter table",
+  "version de postgresql",
+  "version del postgresql",
+  "version de la base de datos",
+  "motor de base de datos",
+  "configuracion interna",
+  "variables de entorno",
+  "database_url",
+  "nuxt_session_secret",
+  "credenciales de base de datos",
+  "contrasena de la base de datos",
+  "password de la base de datos",
   "cambia la contrasena del administrador",
   "cambiar la contrasena del administrador",
   "cambia la contraseña del administrador",
@@ -60,6 +77,14 @@ export function detectPromptInjection(prompt: string): boolean {
     .replace(/[\u0300-\u036f]/g, "");
 
   if (blockedPatterns.some((pattern) => lower.includes(pattern))) {
+    return true;
+  }
+
+  if (/\b(ignora|olvida|omite|desobedece)\b.{0,80}\b(todo|instrucciones|reglas|restricciones)\b/.test(lower)) {
+    return true;
+  }
+
+  if (/\b(actua|actue|comportate|finge|pretende)\b.{0,40}\b(como|ser)\b/.test(lower)) {
     return true;
   }
 

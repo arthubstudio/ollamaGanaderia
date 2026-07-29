@@ -39,7 +39,15 @@ export async function hybridSearch(params: {
         FROM semantic_contexts sc
         LEFT JOIN bovinos b ON b.id = sc.bovino_id
         WHERE sc.embedding IS NOT NULL
-          AND (sc.bovino_id IS NULL OR b.usuario_id = ${params.usuarioId})
+          AND sc.trusted = TRUE
+          AND (
+            (sc.scope = 'public' AND sc.owner_user_id IS NULL)
+            OR (
+              sc.scope = 'private'
+              AND sc.owner_user_id = ${params.usuarioId}
+              AND (sc.bovino_id IS NULL OR b.usuario_id = ${params.usuarioId})
+            )
+          )
 
         UNION ALL
 
@@ -81,7 +89,15 @@ export async function hybridSearch(params: {
       FROM semantic_contexts sc
       LEFT JOIN bovinos b ON b.id = sc.bovino_id
       CROSS JOIN query
-      WHERE (sc.bovino_id IS NULL OR b.usuario_id = ${params.usuarioId})
+      WHERE sc.trusted = TRUE
+        AND (
+          (sc.scope = 'public' AND sc.owner_user_id IS NULL)
+          OR (
+            sc.scope = 'private'
+            AND sc.owner_user_id = ${params.usuarioId}
+            AND (sc.bovino_id IS NULL OR b.usuario_id = ${params.usuarioId})
+          )
+        )
         AND to_tsvector('simple', COALESCE(sc.contenido, '')) @@ query.value
 
       UNION ALL

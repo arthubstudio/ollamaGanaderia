@@ -1,6 +1,13 @@
 import { sql } from "~/lib/db";
 import { ollama } from "~/lib/ollama";
 import { normalizeIaAnswer } from "~/lib/iaResponse";
+import {
+  buildCapabilityAnswer,
+  detectCapabilityIntent,
+  IA_CLARIFICATION_RESPONSE,
+  IA_RAG_INSUFFICIENT_CONTEXT_RESPONSE
+} from "~/lib/iaCapabilities";
+import { normalizeIaText } from "~/lib/iaLanguageNormalizer.js";
 import { setResponseHeader } from "h3";
 import {
   detectPromptInjection,
@@ -35,6 +42,15 @@ import {
   setPendingIaAction
 } from "~/lib/iaConversationState.js";
 import { apiError } from "~/server/utils/api";
+import {
+  safeErrorDetails,
+  safePublicErrorMessage
+} from "~/server/utils/safeLogging";
+import { parseIaMessage } from "~/server/utils/iaRequest";
+import {
+  enforceRateLimit,
+  rateLimitKeyPart
+} from "~/server/utils/rateLimit";
 import { requireUserId } from "~/server/utils/session";
 import {
   routeIaMessage,
@@ -47,13 +63,11 @@ import {
 import { runTransactionalAgent } from "~/server/ai/agents/transactionalAgent";
 import { runRagAgent } from "~/server/ai/agents/ragAgent";
 import type { RagMetrics } from "~/server/ai/rag/advancedRagPipeline";
-
-type ChatBody = {
-  pregunta?: string;
-  conversation_id?: string | number | null;
-  usuario_id?: string | number | null;
-  stream?: boolean;
-};
+import {
+  hashAuditText,
+  sanitizeAuditLabel,
+  sanitizeToolExecutions
+} from "~/server/utils/aiAudit";
 
 type ToolExecution = {
   name: string;
@@ -62,31 +76,6 @@ type ToolExecution = {
   result?: unknown;
   error?: string;
 };
-
-let observabilitySchemaReady: Promise<void> | null = null;
-
-function ensureObservabilitySchema() {
-  if (!observabilitySchemaReady) {
-    observabilitySchemaReady = sql`
-      ALTER TABLE ai_logs
-        ADD COLUMN IF NOT EXISTS selected_agent VARCHAR(32),
-        ADD COLUMN IF NOT EXISTS intent VARCHAR(100),
-        ADD COLUMN IF NOT EXISTS confidence NUMERIC(5,4),
-        ADD COLUMN IF NOT EXISTS route_reason TEXT,
-        ADD COLUMN IF NOT EXISTS context_sources TEXT,
-        ADD COLUMN IF NOT EXISTS retrieved_count INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS reranked_count INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS reranker_used INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS retrieval_latency_ms INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS rerank_latency_ms INTEGER DEFAULT 0
-    `.then(() => undefined).catch((error) => {
-      observabilitySchemaReady = null;
-      throw error;
-    });
-  }
-
-  return observabilitySchemaReady;
-}
 
 function normalizeText(value: string) {
   return (value ?? "")
@@ -399,91 +388,6 @@ function isWriteAction(text: string) {
   return isWriteActionIntent(text);
 }
 
-function isHelpQuestion(text: string) {
-  const t = normalizeText(text);
-
-  const phrases = [
-    "que puedes hacer",
-    "qué puedes hacer",
-    "como me ayudas",
-    "cómo me ayudas",
-    "como funcionas",
-    "cómo funcionas",
-    "para que sirves",
-    "para qué sirves",
-    "que funciones tienes",
-    "qué funciones tienes",
-    "que informacion manejas",
-    "qué información manejas",
-    "que puedes consultar",
-    "qué puedes consultar",
-    "ayuda",
-    "help",
-    "que puedes hacer por mi",
-    "qué puedes hacer por mí",
-    "en que me puedes ayudar",
-    "en qué me puedes ayudar",
-    "como me puedes hacer util",
-    "cómo me puedes hacer útil",
-    "como me puedes hacer de utilidad",
-    "en que me puedes hacer util",
-    "en qué me puedes hacer útil",
-    "para que me sirves",
-    "para qué me sirves"
-  ];
-
-  return phrases.some((p) => t.includes(normalizeText(p)));
-}
-
-function helpAnswer() {
-  return `
-Soy Ganadería AI.
-
-Puedo ayudarte con:
-
-CONSULTAS:
-• Consultar bovinos registrados (vacas y toros)
-• Consultar pesos
-• Consultar vacunas
-• Consultar enfermedades
-• Consultar dueños
-• Consultar ranchos
-• Consultar historial de propiedad
-• Consultar ventas
-• Verificar si un bovino está listo para venta
-• Guardar y recordar memorias tuyas
-
-ACCIONES (puedo hacerlo por ti):
-• Registrar, actualizar y eliminar bovinos (vacas hembras o toros machos)
-• Agregar, actualizar y eliminar vacunas del catálogo
-• Aplicar o quitar vacunas de un bovino
-• Registrar, actualizar y eliminar enfermedades
-• Crear, actualizar y eliminar ranchos
-• Asignar automáticamente tu cuenta como propietaria al registrar bovinos
-• Registrar pesos
-• Enviar bovinos a otros usuarios mediante solicitudes seguras
-• Aceptar, rechazar, cancelar y consultar transferencias
-• Consultar y crear razas del catalogo global
-• Enviar solicitudes de contacto y mensajes privados
-• Consultar conversaciones comunitarias
-
-Ejemplos:
-
-- ¿Cuántos bovinos tengo?
-- ¿Cuántos ranchos tengo?
-- ¿Qué vacunas tiene Lola?
-- ¿Qué vaca está lista para venta?
-- Registra un bovino: lulu, MC323, macho, Bramming
-- Crea un rancho llamado Sur Maru
-- Transfiere la vaca Lola al usuario mario@gmail.com
-- Aplica la vacuna Antiaftosa a Lola
-- Elimina una vaca (te pediré cuál si no especificas)
-- Recuerda que mi vaca favorita es Lola
-
-Nota: una vaca siempre es hembra; un toro siempre es macho. Usa datos cortos y concretos al registrar.
-`.trim();
-}
-
 function buildRagMessages(params: {
   preguntaOriginal: string;
   contextoMemorias: string;
@@ -503,8 +407,9 @@ REGLAS OBLIGATORIAS:
 - NO inventes información.
 - NO uses conocimiento externo.
 - NO expliques conceptos generales.
-- Si la pregunta no está relacionada con las memorias, el contexto ni el historial, responde exactamente:
-  "No encontré información relacionada en el sistema."
+- Si falta contexto para responder, explica brevemente qué dato falta y pide
+  una aclaración concreta.
+- No uses la frase "No encontré información relacionada en el sistema.".
 
 - Responde breve, clara y natural.
 `.trim()
@@ -540,14 +445,16 @@ RESPUESTA:
 
 export default defineEventHandler(async (event) => {
   const requestStart = Date.now();
-  const body = (await readBody(event)) as ChatBody;
-
-  const conversationId =
-    body.conversation_id != null
-      ? String(body.conversation_id)
-      : null;
-
+  const body = await readBody(event);
   const usuarioId = requireUserId(event);
+  await enforceRateLimit(event, {
+    key: `ia:router:user:${rateLimitKeyPart(usuarioId)}`,
+    limit: 20,
+    windowMs: 60 * 1000,
+    message: "Has enviado demasiadas consultas a la IA. Espera un minuto antes de continuar."
+  });
+  const parsedRequest = parseIaMessage(body, { allowStream: true });
+  const conversationId = parsedRequest.conversationId;
 
   if (conversationId) {
     const owner = await sql`
@@ -560,9 +467,9 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const preguntaOriginal = body.pregunta ?? "";
-  const pregunta = normalizeText(preguntaOriginal);
-  const wantsStream = Boolean(body.stream);
+  const preguntaOriginal = parsedRequest.message;
+  const pregunta = normalizeIaText(preguntaOriginal);
+  const wantsStream = parsedRequest.stream;
   const sessionId = conversationId ?? `user:${usuarioId ?? "anonymous"}`;
   const toolsExecuted: ToolExecution[] = [];
   let routerStage = "initialize";
@@ -641,14 +548,15 @@ export default defineEventHandler(async (event) => {
     const tokensPerSecond =
       tokenCount > 0 ? tokenCount / (generationMs / 1000) : null;
 
-    await ensureObservabilitySchema();
-
     await sql`
       INSERT INTO ai_logs (
         session_id,
         timestamp,
-        user_prompt,
-        system_response,
+        prompt_hash,
+        response_hash,
+        prompt_length,
+        response_length,
+        retention_until,
         ttft_ms,
         total_latency_ms,
         tokens_per_second,
@@ -668,17 +576,20 @@ export default defineEventHandler(async (event) => {
       VALUES (
         ${sessionId},
         NOW(),
-        ${preguntaOriginal},
-        ${params.responseText},
+        ${hashAuditText(preguntaOriginal)},
+        ${hashAuditText(params.responseText)},
+        ${preguntaOriginal.length},
+        ${params.responseText.length},
+        NOW() + INTERVAL '30 days',
         ${params.ttftMs},
         ${totalLatencyMs},
         ${tokensPerSecond},
         ${params.wasBlocked ? 1 : 0},
-        ${JSON.stringify(params.toolsExecuted)},
+        ${JSON.stringify(sanitizeToolExecutions(params.toolsExecuted))},
         ${selectedRoute.agent},
         ${selectedRoute.intent},
         ${selectedRoute.confidence},
-        ${selectedRoute.reason},
+        ${sanitizeAuditLabel(selectedRoute.reason)},
         ${JSON.stringify(contextSources)},
         ${ragMetrics?.retrievedCount ?? 0},
         ${ragMetrics?.rerankedCount ?? 0},
@@ -686,6 +597,12 @@ export default defineEventHandler(async (event) => {
         ${ragMetrics?.retrievalLatencyMs ?? 0},
         ${ragMetrics?.rerankLatencyMs ?? 0}
       )
+    `;
+
+    await sql`
+      DELETE FROM ai_logs
+      WHERE retention_until IS NOT NULL
+        AND retention_until < NOW()
     `;
   }
 
@@ -719,7 +636,7 @@ export default defineEventHandler(async (event) => {
         messageId = await insertConversationMessage("assistant", answer);
         assistantMessagePersisted = true;
       } catch (error) {
-        console.error("No se pudo guardar la respuesta de IA:", error);
+        console.error("No se pudo guardar la respuesta de IA", safeErrorDetails(error));
       }
     }
 
@@ -731,7 +648,7 @@ export default defineEventHandler(async (event) => {
         toolsExecuted: meta?.tools ?? toolsExecuted
       });
     } catch (error) {
-      console.error("No se pudo registrar la observabilidad de IA:", error);
+      console.error("No se pudo registrar la observabilidad de IA", safeErrorDetails(error));
     }
 
     if (wantsStream) {
@@ -745,6 +662,7 @@ export default defineEventHandler(async (event) => {
         tipo,
         answer,
         respuesta: answer,
+        blocked: meta?.wasBlocked ?? false,
         final: true,
         message_id: messageId
       }, "answer");
@@ -757,7 +675,8 @@ export default defineEventHandler(async (event) => {
     return {
       tipo,
       answer,
-      respuesta: answer
+      respuesta: answer,
+      blocked: meta?.wasBlocked ?? false
     };
   }
 
@@ -1018,7 +937,8 @@ export default defineEventHandler(async (event) => {
         conversationId,
         context: agentContext,
         directTool: tool,
-        directArgs: args
+        directArgs: args,
+        confirmedAction: true
       });
 
       toolsExecuted[toolsExecuted.length - 1].result = response;
@@ -1065,30 +985,23 @@ export default defineEventHandler(async (event) => {
         tools: toolsExecuted
       });
     } catch (error: any) {
-      const errorCode = String(
-        error?.data?.data?.code ?? error?.data?.code ?? error?.code ?? "TOOL_EXECUTION_ERROR"
-      );
-      const errorMessage = String(
-        error?.data?.data?.message ??
-        error?.data?.message ??
-        error?.statusMessage ??
-        error?.message ??
+      const safeDetails = safeErrorDetails(error);
+      const errorCode = safeDetails.error_code;
+      const errorMessage = safePublicErrorMessage(
+        error,
         `La herramienta ${tool} fallo sin devolver un detalle de validacion.`
       );
       toolsExecuted[toolsExecuted.length - 1].status = "ERROR";
-      toolsExecuted[toolsExecuted.length - 1].error = errorMessage;
+      toolsExecuted[toolsExecuted.length - 1].error = safeDetails.error_type;
       toolsExecuted[toolsExecuted.length - 1].result = {
         code: errorCode,
         message: errorMessage,
-        tool,
-        args
+        tool
       };
-      console.error("Error ejecutando accion planificada:", {
+      console.error("Error ejecutando accion planificada", {
         tool,
-        args,
         code: errorCode,
-        message: errorMessage,
-        technical_message: String(error?.message ?? error)
+        ...safeErrorDetails(error)
       });
 
       return await finish(
@@ -1097,6 +1010,26 @@ export default defineEventHandler(async (event) => {
         { tools: toolsExecuted }
       );
     }
+  }
+
+  async function handleConfirmationProposal(response: any) {
+    if (!response?.requires_confirmation || !response?.tool) return null;
+
+    selectedRoute = {
+      agent: "transactional",
+      intent: "transaction_pending",
+      confidence: 1,
+      reason: "La tool propuesta requiere confirmacion explicita antes de ejecutarse."
+    };
+    setPendingIaAction(conversationId, usuarioId, {
+      tool: String(response.tool),
+      args: response.argumentos && typeof response.argumentos === "object"
+        ? response.argumentos
+        : {},
+      missing: [],
+      awaitingConfirmation: true
+    });
+    return finish("planner", response.respuesta, { tools: toolsExecuted });
   }
 
   try {
@@ -1131,6 +1064,37 @@ export default defineEventHandler(async (event) => {
         wasBlocked: true,
         tools: toolsExecuted
       });
+    }
+
+    // =====================================================
+    // CAPACIDADES Y ACLARACIONES
+    // Se resuelven antes del planner para que una pregunta de
+    // ayuda nunca active una herramienta transaccional.
+    // =====================================================
+
+    const capabilityIntent = detectCapabilityIntent(preguntaOriginal);
+    if (capabilityIntent) {
+      selectedRoute = {
+        agent: "direct",
+        intent:
+          capabilityIntent.kind === "system"
+            ? "system_capabilities"
+            : capabilityIntent.kind === "module"
+              ? "module_capabilities"
+              : "capability_clarification",
+        confidence: capabilityIntent.confidence,
+        reason: capabilityIntent.reason
+      };
+
+      if (getPendingIaAction(conversationId, usuarioId)) {
+        clearPendingIaAction(conversationId, usuarioId);
+      }
+
+      return await finish(
+        capabilityIntent.kind === "clarification" ? "clarificacion" : "ayuda",
+        buildCapabilityAnswer(capabilityIntent),
+        { tools: [] }
+      );
     }
 
     // =====================================================
@@ -1177,7 +1141,7 @@ export default defineEventHandler(async (event) => {
         toolsExecuted[0].result = created;
       } catch (error: any) {
         toolsExecuted[0].status = "ERROR";
-        toolsExecuted[0].error = String(error?.message ?? error);
+        toolsExecuted[0].error = safeErrorDetails(error).error_type;
       }
 
       if (wantsStream) sseWrite({ estado: "Guardando memoria..." });
@@ -1380,6 +1344,9 @@ export default defineEventHandler(async (event) => {
 
         toolsExecuted[toolsExecuted.length - 1].result = functionResponse;
 
+        const confirmationResponse = await handleConfirmationProposal(functionResponse);
+        if (confirmationResponse) return confirmationResponse;
+
         if (functionResponse?.encontrado) {
           return await finish("function-calling", functionResponse.respuesta, {
             tools: toolsExecuted
@@ -1398,15 +1365,14 @@ export default defineEventHandler(async (event) => {
           { tools: toolsExecuted }
         );
       } catch (error: any) {
+        const safeDetails = safeErrorDetails(error);
         toolsExecuted[toolsExecuted.length - 1].status = "ERROR";
-        toolsExecuted[toolsExecuted.length - 1].error = String(error?.message ?? error);
+        toolsExecuted[toolsExecuted.length - 1].error = safeDetails.error_type;
 
         return await finish(
           "function-calling",
-          String(
-            error?.data?.data?.message ??
-            error?.data?.message ??
-            error?.statusMessage ??
+          safePublicErrorMessage(
+            error,
             `La herramienta fallo durante ${routerStage}. El detalle tecnico quedo registrado.`
           ),
           { tools: toolsExecuted }
@@ -1514,16 +1480,6 @@ export default defineEventHandler(async (event) => {
     }
 
     // =====================================================
-    // AYUDA GENERAL
-    // =====================================================
-
-    if (isHelpQuestion(preguntaOriginal)) {
-      return await finish("ayuda", helpAnswer(), {
-        tools: toolsExecuted
-      });
-    }
-
-    // =====================================================
     // FILTRO GANADERO
     // =====================================================
 
@@ -1591,11 +1547,9 @@ export default defineEventHandler(async (event) => {
       isContextualFollowUp(pregunta) && historial.length > 0;
 
     if (!esGanadera && !animalMatch && !esSeguimientoContextual) {
-      if (wantsStream) sseWrite({ estado: "No encontré información relacionada." });
-
       return await finish(
-        "filtro",
-        "No encontré información relacionada en el sistema.",
+        "clarificacion",
+        IA_CLARIFICATION_RESPONSE,
         { tools: toolsExecuted }
       );
     }
@@ -1959,6 +1913,9 @@ export default defineEventHandler(async (event) => {
 
       toolsExecuted[toolsExecuted.length - 1].result = functionResponse;
 
+      const confirmationResponse = await handleConfirmationProposal(functionResponse);
+      if (confirmationResponse) return confirmationResponse;
+
       if (functionResponse?.encontrado) {
         return await finish("function-calling", functionResponse.respuesta, {
           tools: toolsExecuted
@@ -1966,7 +1923,7 @@ export default defineEventHandler(async (event) => {
       }
     } catch (error: any) {
       toolsExecuted[toolsExecuted.length - 1].status = "ERROR";
-      toolsExecuted[toolsExecuted.length - 1].error = String(error?.message ?? error);
+      toolsExecuted[toolsExecuted.length - 1].error = safeErrorDetails(error).error_type;
     }
 
     // =====================================================
@@ -2332,7 +2289,7 @@ ${enfermedadesRows.length}
       toolsExecuted.push({
         name: "rag.advanced_pipeline",
         status: "ERROR",
-        error: String(advancedRagError?.message ?? advancedRagError)
+        error: safeErrorDetails(advancedRagError).error_type
       });
     }
 
@@ -2414,7 +2371,7 @@ ${enfermedadesRows.length}
 
         const ttftMs = firstTokenAt ? firstTokenAt - requestStart : null;
 
-        return await finish("rag", finalText.trim() || "No encontré información relacionada en el sistema.", {
+        return await finish("rag", finalText.trim() || IA_RAG_INSUFFICIENT_CONTEXT_RESPONSE, {
           ttftMs,
           alreadyStreamed: true,
           tools: toolsExecuted
@@ -2433,7 +2390,7 @@ ${enfermedadesRows.length}
 
       const respuestaFinal =
         response.message?.content?.trim() ||
-        "No encontré información relacionada en el sistema.";
+        IA_RAG_INSUFFICIENT_CONTEXT_RESPONSE;
 
       toolsExecuted.push({
         name: "ollama.chat",
@@ -2455,7 +2412,7 @@ ${enfermedadesRows.length}
       toolsExecuted.push({
         name: "ollama.chat",
         status: "ERROR",
-        error: String(ollamaError?.message ?? ollamaError)
+        error: safeErrorDetails(ollamaError).error_type
       });
 
       return await finish("rag", ollamaUnavailable, {
@@ -2463,14 +2420,15 @@ ${enfermedadesRows.length}
       });
     }
   } catch (error: any) {
-    console.error("IA router error", error);
-    const errorText = `Error interno en el router [${routerStage}]: ${String(
-      error?.message ?? error
-    )}`;
-    const knownError = error?.data?.data?.message ?? error?.data?.message ?? error?.statusMessage;
-    const userError = knownError
-      ? String(knownError)
-      : `La consulta fallo durante la etapa ${routerStage}. El detalle tecnico quedo registrado.`;
+    console.error("IA router error", {
+      stage: routerStage,
+      ...safeErrorDetails(error)
+    });
+    const errorText = `Error interno controlado en la etapa ${routerStage}.`;
+    const userError = safePublicErrorMessage(
+      error,
+      `La consulta fallo durante la etapa ${routerStage}. El detalle tecnico quedo registrado.`
+    );
 
     try {
       await logAi({
@@ -2482,7 +2440,7 @@ ${enfermedadesRows.length}
           {
             name: "router.error",
             status: "ERROR",
-            error: String(error?.message ?? error)
+            error: safeErrorDetails(error).error_type
           }
         ]
       });

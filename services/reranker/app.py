@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import List
 
 from fastapi import FastAPI, HTTPException
@@ -10,6 +11,7 @@ MODEL_NAME = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 MAX_DOCUMENTS = int(os.getenv("RERANKER_MAX_DOCUMENTS", "50"))
 
 app = FastAPI(title="Ganaderia AI Local Reranker", version="1.0.0")
+logger = logging.getLogger("ganaderia-reranker")
 model = CrossEncoder(MODEL_NAME)
 
 
@@ -35,5 +37,8 @@ def rerank(request: RerankRequest):
         results.sort(key=lambda item: item["score"], reverse=True)
         return {"results": results}
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
-
+        logger.exception("Reranking failed: %s", type(error).__name__)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo completar el reranking local.",
+        ) from error

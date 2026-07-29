@@ -1,13 +1,5 @@
-import postgres from "postgres";
-
 import { generarEmbedding } from "./embeddings";
-
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
-);
+import { sql } from "./db";
 
 export async function guardarContextoSemantico(
   vacaId: number,
@@ -20,14 +12,25 @@ export async function guardarContextoSemantico(
 
   await sql`
 
-    INSERT INTO semantic_contexts
-    (bovino_id, contenido, embedding)
-
-    VALUES (
-      ${vacaId},
+    INSERT INTO semantic_contexts (
+      bovino_id,
+      owner_user_id,
+      scope,
+      source,
+      trusted,
+      contenido,
+      embedding
+    )
+    SELECT
+      b.id,
+      b.usuario_id,
+      'private',
+      'semantic_write',
+      TRUE,
       ${contenido},
       ${vector}::vector
-    )
+    FROM bovinos b
+    WHERE b.id = ${vacaId}
 
   `;
 

@@ -1,6 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =====================================================
 -- USUARIOS
@@ -10,7 +11,10 @@ CREATE TABLE IF NOT EXISTS usuarios (
     nombre VARCHAR(100) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    rol VARCHAR(20) NOT NULL DEFAULT 'admin',
+    rol VARCHAR(20) NOT NULL DEFAULT 'usuario',
+    directory_key UUID NOT NULL DEFAULT gen_random_uuid(),
+    security_locked_at TIMESTAMPTZ,
+    password_changed_at TIMESTAMPTZ,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -43,7 +47,9 @@ CREATE TABLE IF NOT EXISTS memories (
     contenido TEXT NOT NULL,
     embedding vector(768),
     created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    updated_at TIMESTAMP DEFAULT NOW(),
+    transferable BOOLEAN NOT NULL DEFAULT FALSE,
+    CHECK (char_length(contenido) <= 5000)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS memories_usuario_slot_uq
@@ -205,6 +211,10 @@ ON ventas(bovino_id);
 CREATE TABLE IF NOT EXISTS semantic_contexts (
     id SERIAL PRIMARY KEY,
     bovino_id INT REFERENCES bovinos(id) ON DELETE CASCADE,
+    owner_user_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+    scope VARCHAR(20) NOT NULL DEFAULT 'private' CHECK (scope IN ('private', 'public')),
+    source VARCHAR(80) NOT NULL DEFAULT 'unknown',
+    trusted BOOLEAN NOT NULL DEFAULT FALSE,
     contenido TEXT NOT NULL,
     embedding vector(768),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -239,8 +249,30 @@ CREATE TABLE IF NOT EXISTS ai_logs (
     total_latency_ms INTEGER,
     tokens_per_second NUMERIC,
     was_blocked INTEGER DEFAULT 0,
-    tools_executed TEXT
+    tools_executed TEXT,
+    prompt_hash CHAR(64),
+    response_hash CHAR(64),
+    prompt_length INTEGER,
+    response_length INTEGER,
+    retention_until TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id_hash CHAR(64) PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    user_agent_hash CHAR(64)
+);
+
+CREATE INDEX IF NOT EXISTS auth_sessions_user_active_idx
+ON auth_sessions (user_id, expires_at)
+WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx
+ON auth_sessions (expires_at);
 
 ALTER TABLE ai_logs ADD COLUMN IF NOT EXISTS selected_agent VARCHAR(32);
 ALTER TABLE ai_logs ADD COLUMN IF NOT EXISTS intent VARCHAR(100);
@@ -292,8 +324,8 @@ CREATE TABLE IF NOT EXISTS stress_seed_batches (
 
 INSERT INTO usuarios (id, nombre, email, password_hash, rol)
 VALUES
-(1, 'Hugo', 'hugo@ganaderia.com', 'temporal', 'admin'),
-(2, 'Pedro', 'pedro@gmail.com', '123456', 'admin')
+(1, 'Hugo Demo', 'hugo-demo@invalid.local', 'scrypt$Dw_C6fA63JbRZm1oi-oUvA$a395i-kvKyJ-f--3y5ICG6iduq_rCJMJy9DkyryyaTqKaaHyyC6OPT9Q3-IlgQUh6GswlPBHSDmuE27cSRHlwQ', 'usuario'),
+(2, 'Pedro Demo', 'pedro-demo@invalid.local', 'scrypt$2WNEMEKyrDawU3Sl5j7e5g$wur4GbAaAngbWPhliiYlUyllKJQFfCBWpiemhD08dHc8uJqlZukq-df8L5lAtsaNSbSTHWqGp-72RV3YLEPWww', 'usuario')
 ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO duenos (id, usuario_id, nombre, telefono, direccion)
@@ -371,30 +403,56 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO semantic_contexts
-(id, bovino_id, contenido, updated_at)
+(id, bovino_id, owner_user_id, scope, source, trusted, contenido, updated_at)
 VALUES
 (
   1,
   1,
+  2,
+  'private',
+  'seed_bovino',
+  TRUE,
   'La vaca Lola raza Brahman pesa 420kg y tiene vacunación completa.',
   NOW()
 ),
 (
   2,
   2,
+  2,
+  'private',
+  'seed_bovino',
+  TRUE,
   'El toro ToroMax raza Angus pesa 510kg y está listo para venta.',
   NOW()
 ),
 (
   3,
   3,
+  2,
+  'private',
+  'seed_bovino',
+  TRUE,
   'Meme pesa 125 kg y pertenece al usuario Pedro.',
   NOW()
 )
 ON CONFLICT DO NOTHING;
 
-INSERT INTO semantic_contexts (bovino_id, contenido, updated_at)
-SELECT NULL, knowledge.contenido, NOW()
+SELECT setval(
+  pg_get_serial_sequence('semantic_contexts', 'id'),
+  COALESCE((SELECT MAX(id) FROM semantic_contexts), 1),
+  true
+);
+
+INSERT INTO semantic_contexts (
+  bovino_id,
+  owner_user_id,
+  scope,
+  source,
+  trusted,
+  contenido,
+  updated_at
+)
+SELECT NULL, NULL, 'public', 'seed_knowledge', TRUE, knowledge.contenido, NOW()
 FROM (VALUES
   ('La prevencion sanitaria bovina combina vacunacion, observacion diaria, bioseguridad, agua limpia y seguimiento veterinario.'),
   ('La brucelosis bovina es una enfermedad infecciosa. Su prevencion y vacunacion deben seguir la normativa local y la indicacion veterinaria.'),
@@ -435,5 +493,16 @@ SELECT setval(pg_get_serial_sequence('requisitos_venta', 'id'), COALESCE((SELECT
 SELECT setval(pg_get_serial_sequence('semantic_contexts', 'id'), COALESCE((SELECT MAX(id) FROM semantic_contexts), 1), true);
 SELECT setval(pg_get_serial_sequence('ai_logs', 'id'), COALESCE((SELECT MAX(id) FROM ai_logs), 1), true);
 SELECT setval(pg_get_serial_sequence('memories', 'id'), COALESCE((SELECT MAX(id) FROM memories), 1), true);
+
+CREATE TABLE IF NOT EXISTS security_rate_limits (
+    key_hash VARCHAR(160) PRIMARY KEY,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS security_rate_limits_expires_idx
+ON security_rate_limits (expires_at);
 
 COMMIT;

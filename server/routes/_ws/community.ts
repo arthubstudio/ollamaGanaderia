@@ -12,8 +12,17 @@ import {
 } from "~/server/services/communityRealtime";
 import {
   SESSION_COOKIE_NAME,
+  validateActiveUserSessionToken,
   verifyUserSessionToken
 } from "~/server/utils/session";
+import {
+  releaseRealtimeConnection,
+  tryAcquireRealtimeConnection
+} from "~/server/utils/realtimeLimits";
+import { consumeRateLimit, rateLimitKeyPart } from "~/server/utils/rateLimit";
+
+const MAX_FRAME_BYTES = 16 * 1024;
+const MAX_CONNECTIONS_PER_USER = 4;
 
 function getCookieValue(cookieHeader: string | null, name: string) {
   if (!cookieHeader) return null;
@@ -35,22 +44,28 @@ function peerUserId(peer: { context: Record<string, unknown> }) {
   return Number.isInteger(userId) && userId > 0 ? userId : null;
 }
 
+function releasePeerConnection(peer: { context: Record<string, unknown> }) {
+  if (peer.context.connectionReleased) return;
+  peer.context.connectionReleased = true;
+  const key = String(peer.context.connectionKey ?? "");
+  if (key) releaseRealtimeConnection(key);
+}
+
 function sendError(peer: { send: (data: unknown) => unknown }, error: any, request: any) {
-  const message =
-    error?.data?.message ||
-    error?.statusMessage ||
-    error?.message ||
+  const code = String(error?.data?.code || error?.code || "CHAT_ERROR");
+  const message = error?.data?.message ||
+    (code === "RATE_LIMITED" ? "Se alcanzo el limite temporal del chat." : null) ||
     "No se pudo procesar el evento del chat.";
   peer.send(JSON.stringify({
     type: "error",
-    code: error?.data?.code || error?.code || "CHAT_ERROR",
+    code,
     message,
     client_message_id: request?.client_message_id ?? null
   }));
 }
 
 export default defineWebSocketHandler({
-  upgrade(request) {
+  async upgrade(request) {
     const origin = request.headers.get("origin");
     const host = request.headers.get("host");
     if (origin && host) {
@@ -67,16 +82,24 @@ export default defineWebSocketHandler({
       request.headers.get("cookie"),
       SESSION_COOKIE_NAME
     );
-    const userId = verifyUserSessionToken(
-      token,
-      String(useRuntimeConfig().sessionSecret)
-    );
+    const secret = String(useRuntimeConfig().sessionSecret);
+    const decodedUserId = verifyUserSessionToken(token, secret);
+    const userId = decodedUserId
+      ? await validateActiveUserSessionToken(token, secret)
+      : null;
     if (!userId) {
       return new Response("No autenticado", { status: 401 });
     }
 
+    const connectionKey = `ws:community:user:${userId}`;
+    if (!tryAcquireRealtimeConnection(connectionKey, MAX_CONNECTIONS_PER_USER)) {
+      return new Response("Demasiadas conexiones de chat", { status: 429 });
+    }
+
     const requestUrl = new URL(request.url);
     request.context.userId = userId;
+    request.context.sessionToken = token;
+    request.context.connectionKey = connectionKey;
     request.context.after = Math.max(
       Number(requestUrl.searchParams.get("after")) || 0,
       0
@@ -97,6 +120,7 @@ export default defineWebSocketHandler({
     } catch (error) {
       sendError(peer, error, null);
       unregisterCommunityPeer(userId, peer.id);
+      releasePeerConnection(peer);
       peer.close(1011, "No se pudo sincronizar el chat");
     }
   },
@@ -105,6 +129,32 @@ export default defineWebSocketHandler({
     const userId = peerUserId(peer);
     if (!userId) {
       peer.close(1008, "No autenticado");
+      return;
+    }
+
+    if (rawMessage.uint8Array().byteLength > MAX_FRAME_BYTES) {
+      peer.close(1009, "Mensaje demasiado grande");
+      return;
+    }
+
+    const quota = consumeRateLimit({
+      key: `ws:event:user:${rateLimitKeyPart(userId)}`,
+      limit: 120,
+      windowMs: 60 * 1000
+    });
+    if (!quota.allowed) {
+      sendError(peer, { code: "RATE_LIMITED" }, null);
+      peer.close(1008, "Limite temporal alcanzado");
+      return;
+    }
+
+    const secret = String(useRuntimeConfig().sessionSecret);
+    const activeUserId = await validateActiveUserSessionToken(
+      String(peer.context.sessionToken ?? ""),
+      secret
+    );
+    if (activeUserId !== userId) {
+      peer.close(1008, "Sesion revocada");
       return;
     }
 
@@ -155,11 +205,13 @@ export default defineWebSocketHandler({
   close(peer) {
     const userId = peerUserId(peer);
     if (userId) unregisterCommunityPeer(userId, peer.id);
+    releasePeerConnection(peer);
   },
 
   error(peer, error) {
     const userId = peerUserId(peer);
     if (userId) unregisterCommunityPeer(userId, peer.id);
-    console.error("Error WebSocket del chat comunitario:", error);
+    releasePeerConnection(peer);
+    console.error("Error WebSocket del chat comunitario:", String(error?.name ?? "WSError"));
   }
 });

@@ -179,11 +179,12 @@ export function inferCrearCatalogo(pregunta: string): InferredAction | null {
   if (!isCreateOnlyCatalog(pregunta)) return null;
 
   const t = normalizeIntentText(pregunta);
+  const extractionText = normalizeRouterText(pregunta);
 
   if (/\b(dueno|dueño)\b/.test(t)) {
     const nombre =
       extractQuotedOrNamed(pregunta, "(?:un\\s+)?(?:dueno|dueño)") ??
-      extractTokenAfter(t, /(?:dueno|dueño)\s+(?:llamado\s+|de nombre\s+)?([a-z0-9][a-z0-9 _-]{0,40})/i);
+      extractTokenAfter(extractionText, /(?:dueno|dueño)\s+(?:llamado\s+|de nombre\s+)?([a-z0-9][a-z0-9 _-]{0,40})/i);
 
     if (!nombre) return null;
     return null;
@@ -193,7 +194,7 @@ export function inferCrearCatalogo(pregunta: string): InferredAction | null {
     const nombre =
       extractQuotedOrNamed(pregunta, "(?:un\\s+)?(?:nuevo\\s+)?rancho") ??
       extractTokenAfter(
-        t,
+        extractionText,
         /(?:rancho)\s+(?:llamado\s+|de nombre\s+|denominado\s+)?([a-z0-9][a-z0-9 _-]{0,40})/i
       );
 
@@ -204,7 +205,7 @@ export function inferCrearCatalogo(pregunta: string): InferredAction | null {
   if (/\bvacuna/.test(t)) {
     const nombre =
       extractQuotedOrNamed(pregunta, "(?:una\\s+)?vacuna") ??
-      extractTokenAfter(t, /(?:vacuna)\s+(?:llamada\s+|de nombre\s+)?([a-z0-9][a-z0-9 _-]{0,40})/i);
+      extractTokenAfter(extractionText, /(?:vacuna)\s+(?:llamada\s+|de nombre\s+)?([a-z0-9][a-z0-9 _-]{0,40})/i);
 
     if (!nombre) return null;
     return { tool: "crearVacuna", args: { nombre } };
@@ -239,13 +240,14 @@ export function inferRegistrarEnfermedad(
   nombreAnimalContexto?: string | null
 ): InferredAction | null {
   const t = normalizeIntentText(pregunta);
+  const extractionText = normalizeRouterText(pregunta);
   if (!/\benfermedad/.test(t) || /\bvacuna/.test(t)) return null;
   if (isReadQuery(pregunta)) return null;
   if (!hasWriteVerb(t) && !/\b(enfermedad)\s+[a-z0-9]/i.test(pregunta)) return null;
 
   const enfermedad =
     extractQuotedOrNamed(pregunta, "enfermedad") ??
-    extractTokenAfter(t, /\benfermedad\s+(?:llamada\s+|de\s+nombre\s+)?([a-z0-9_-]+)/i);
+    extractTokenAfter(extractionText, /\benfermedad\s+(?:llamada\s+|de\s+nombre\s+)?([a-z0-9_-]+)/i);
 
   if (!enfermedad) return null;
 
@@ -263,13 +265,14 @@ export function inferAplicarVacuna(
   nombreAnimalContexto?: string | null
 ): InferredAction | null {
   const t = normalizeIntentText(pregunta);
+  const extractionText = normalizeRouterText(pregunta);
   if (/\benfermedad/.test(t) || isReadQuery(pregunta)) return null;
   if (!/\bvacuna/.test(t)) return null;
   if (!hasWriteVerb(t)) return null;
 
   const vacuna_nombre =
     extractQuotedOrNamed(pregunta, "vacuna") ??
-    extractTokenAfter(t, /\bvacuna\s+(?:llamada\s+|de\s+nombre\s+)?([a-z0-9_-]+)/i);
+    extractTokenAfter(extractionText, /\bvacuna\s+(?:llamada\s+|de\s+nombre\s+)?([a-z0-9_-]+)/i);
 
   if (!vacuna_nombre) return null;
 
@@ -289,6 +292,7 @@ export function inferDeleteAction(
   if (!isDeleteAction(pregunta)) return null;
 
   const t = normalizeIntentText(pregunta);
+  const extractionText = normalizeRouterText(pregunta);
   const nombre = extractBovinoFromQuestion(pregunta, nombreAnimalContexto);
 
   if (/\b(vaca|vacas|bovino|bovinos|toro|toros)\b/.test(t) && nombre) {
@@ -298,7 +302,7 @@ export function inferDeleteAction(
   if (/\b(enfermedad|enfermedades)\b/.test(t)) {
     const enfermedad =
       extractQuotedOrNamed(pregunta, "enfermedad") ??
-      extractTokenAfter(t, /\benfermedad\s+([a-z0-9 _-]+)/i);
+      extractTokenAfter(extractionText, /\benfermedad\s+([a-z0-9 _-]+)/i);
     if (nombre && enfermedad) {
       return { tool: "eliminarEnfermedad", args: { nombre_vaca: nombre, enfermedad } };
     }
@@ -307,7 +311,7 @@ export function inferDeleteAction(
   if (/\b(vacuna|vacunas)\b/.test(t) && /\b(aplicad|puesta|asignad|de la vaca|del bovino)\b/.test(t)) {
     const vacuna_nombre =
       extractQuotedOrNamed(pregunta, "vacuna") ??
-      extractTokenAfter(t, /\bvacuna\s+([a-z0-9 _-]+)/i);
+      extractTokenAfter(extractionText, /\bvacuna\s+([a-z0-9 _-]+)/i);
     if (nombre && vacuna_nombre) {
       return { tool: "eliminarVacunaAplicada", args: { nombre_vaca: nombre, vacuna_nombre } };
     }
@@ -316,21 +320,21 @@ export function inferDeleteAction(
   if (/\b(vacuna|vacunas)\b/.test(t) && !/\b(vaca|bovino|toro)\b/.test(t)) {
     const vacuna_nombre =
       extractQuotedOrNamed(pregunta, "vacuna") ??
-      extractTokenAfter(t, /\bvacuna\s+([a-z0-9 _-]+)/i);
+      extractTokenAfter(extractionText, /\bvacuna\s+([a-z0-9 _-]+)/i);
     if (vacuna_nombre) return { tool: "eliminarVacuna", args: { nombre: vacuna_nombre } };
   }
 
   if (/\b(dueno|dueño)\b/.test(t) && !/\b(vaca|bovino|toro)\b/.test(t)) {
     const dueno_nombre =
       extractQuotedOrNamed(pregunta, "(?:dueno|dueño)") ??
-      extractTokenAfter(t, /(?:dueno|dueño)\s+([a-z0-9 _-]+)/i);
+      extractTokenAfter(extractionText, /(?:dueno|dueño)\s+([a-z0-9 _-]+)/i);
     if (dueno_nombre) return { tool: "eliminarDueno", args: { nombre: dueno_nombre } };
   }
 
   if (/\brancho/.test(t) && !/\b(vaca|bovino|toro)\b/.test(t)) {
     const rancho_nombre =
       extractQuotedOrNamed(pregunta, "rancho") ??
-      extractTokenAfter(t, /\brancho\s+([a-z0-9 _-]+)/i);
+      extractTokenAfter(extractionText, /\brancho\s+([a-z0-9 _-]+)/i);
     if (rancho_nombre) return { tool: "eliminarRancho", args: { nombre: rancho_nombre } };
   }
 
@@ -344,13 +348,14 @@ export function inferUpdateAction(
   if (!isUpdateAction(pregunta)) return null;
 
   const t = normalizeIntentText(pregunta);
+  const extractionText = normalizeRouterText(pregunta);
   const nombre = extractBovinoFromQuestion(pregunta, nombreAnimalContexto);
 
   if (/\b(vaca|vacas|bovino|bovinos|toro|toros)\b/.test(t) && nombre) {
     const args: Record<string, string> = { nombre };
-    const nuevoNombre = extractTokenAfter(t, /(?:renombrar|cambiar nombre|nuevo nombre)\s+(?:a\s+)?([a-z0-9 _-]+)/i);
-    const arete = extractTokenAfter(t, /(?:arete)\s+(?:a\s+)?([a-z0-9_-]+)/i);
-    const raza = extractTokenAfter(t, /(?:raza)\s+(?:a\s+)?([a-z0-9 _-]+)/i);
+    const nuevoNombre = extractTokenAfter(extractionText, /(?:renombrar|cambiar nombre|nuevo nombre)\s+(?:a\s+)?([a-z0-9 _-]+)/i);
+    const arete = extractTokenAfter(extractionText, /(?:arete)\s+(?:a\s+)?([a-z0-9_-]+)/i);
+    const raza = extractTokenAfter(extractionText, /(?:raza)\s+(?:a\s+)?([a-z0-9 _-]+)/i);
     if (nuevoNombre) args.nuevo_nombre = nuevoNombre;
     if (arete) args.numero_arete = arete;
     if (raza) args.raza = raza;
@@ -358,8 +363,8 @@ export function inferUpdateAction(
   }
 
   if (/\b(enfermedad|enfermedades)\b/.test(t) && nombre) {
-    const enfermedad = extractTokenAfter(t, /\benfermedad\s+([a-z0-9 _-]+)/i);
-    const tratamiento = extractTokenAfter(t, /tratamiento\s+(?:a\s+)?([a-z0-9 _-]+)/i);
+    const enfermedad = extractTokenAfter(extractionText, /\benfermedad\s+([a-z0-9 _-]+)/i);
+    const tratamiento = extractTokenAfter(extractionText, /tratamiento\s+(?:a\s+)?([a-z0-9 _-]+)/i);
     if (enfermedad) {
       return {
         tool: "actualizarEnfermedad",

@@ -1,4 +1,5 @@
 import { normalizeRouterText, isRegistroBovinoDatos } from "~/lib/bovinoRouterHelpers";
+import { normalizeIaText } from "~/lib/iaLanguageNormalizer.js";
 
 const STOPWORDS_ANIMAL = new Set([
   "la", "el", "los", "las", "de", "del", "y", "o", "a", "al", "en", "que",
@@ -11,7 +12,7 @@ const STOPWORDS_ANIMAL = new Set([
 ]);
 
 export function normalizeIntentText(value: string) {
-  return normalizeRouterText(value);
+  return normalizeIaText(value);
 }
 
 export function isActionRequest(text: string) {
@@ -362,7 +363,7 @@ export function isIncompleteAction(text: string) {
       const matchAnimal = text.match(
         /\b(?:vaca|bovino|toro)\s+([a-z0-9_-]{2,})/i
       );
-      if (matchAnimal?.[1] && !STOPWORDS_ANIMAL.has(normalizeIntentText(matchAnimal[1]))) {
+      if (matchAnimal?.[1] && !STOPWORDS_ANIMAL.has(normalizeRouterText(matchAnimal[1]))) {
         return null;
       }
       return "delete";

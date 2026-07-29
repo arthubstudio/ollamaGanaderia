@@ -4,7 +4,13 @@ import { runRagAgent } from "~/server/ai/agents/ragAgent";
 import { routeIaMessage } from "~/server/ai/agents/routerAgent";
 import { buildAgentContext } from "~/server/ai/context/agentContext";
 import { apiError } from "~/server/utils/api";
+import { parseIaMessage } from "~/server/utils/iaRequest";
+import {
+  enforceRateLimit,
+  rateLimitKeyPart
+} from "~/server/utils/rateLimit";
 import { requireUserId } from "~/server/utils/session";
+import { hashAuditText } from "~/server/utils/aiAudit";
 
 type EvaluateBody = {
   message?: string;
@@ -33,14 +39,15 @@ export default defineEventHandler(async (event) => {
   const startedAt = Date.now();
   const body = await readBody<EvaluateBody>(event);
   const usuarioId = requireUserId(event);
-  const message = String(body?.message ?? "").trim();
-  const conversationId = body?.conversation_id
-    ? String(body.conversation_id)
-    : null;
-
-  if (!message) {
-    apiError({ statusCode: 400, code: "VALIDATION_ERROR", message: "message es obligatorio." });
-  }
+  await enforceRateLimit(event, {
+    key: `ia:evaluate:user:${rateLimitKeyPart(usuarioId)}`,
+    limit: 30,
+    windowMs: 60 * 1000,
+    message: "Se alcanzo el limite temporal del evaluador de IA."
+  });
+  const parsedRequest = parseIaMessage(body, { field: "message" });
+  const message = parsedRequest.message;
+  const conversationId = parsedRequest.conversationId;
 
   if (body?.usuario_id != null && Number(body.usuario_id) !== usuarioId) {
     apiError({ statusCode: 403, code: "FORBIDDEN", message: "El usuario no coincide con la sesion autenticada." });
@@ -137,7 +144,7 @@ export default defineEventHandler(async (event) => {
     SELECT ttft_ms, total_latency_ms, tools_executed, was_blocked
     FROM ai_logs
     WHERE session_id = ${sessionId}
-      AND user_prompt = ${message}
+      AND prompt_hash = ${hashAuditText(message)}
     ORDER BY id DESC
     LIMIT 1
   `;
@@ -157,4 +164,3 @@ export default defineEventHandler(async (event) => {
     }
   };
 });
-

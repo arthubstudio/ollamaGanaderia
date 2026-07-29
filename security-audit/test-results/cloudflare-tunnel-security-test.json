@@ -1,0 +1,301 @@
+{
+  "title": "Authorized Cloudflare Tunnel security validation",
+  "generatedAt": "2026-07-29T17:18:15.147Z",
+  "scope": {
+    "authorizedHost": "reviewing-outcome-barn-andrews.trycloudflare.com",
+    "requestsLimitedToAuthorizedHost": true,
+    "destructiveActions": false,
+    "businessRecordsCreatedOrDeleted": false,
+    "possibleStateTransitions": [
+      "authentication rate-limit counters",
+      "WebSocket delivery timestamps for pending messages"
+    ]
+  },
+  "tests": [
+    {
+      "id": "CFT-001",
+      "title": "TLS certificate and protocol validation",
+      "status": "PASS",
+      "evidence": {
+        "authorized": true,
+        "protocol": "TLSv1.3",
+        "validFrom": "Jun  9 19:45:39 2026 GMT",
+        "validTo": "Sep  7 20:45:24 2026 GMT",
+        "subjectAltNameIncludesHost": true
+      }
+    },
+    {
+      "id": "CFT-002",
+      "title": "Tunnel serves the login page without a blocked-host response",
+      "status": "PASS",
+      "evidence": {
+        "status": 200,
+        "contentType": "text/html;charset=utf-8",
+        "cloudflareRayPresent": true,
+        "cloudflareCacheStatus": "DYNAMIC"
+      }
+    },
+    {
+      "id": "CFT-003",
+      "title": "HTTPS security headers",
+      "status": "PASS",
+      "evidence": {
+        "cache-control": "no-store, no-cache, must-revalidate, private",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "a22dc825d9f21654-QRO",
+        "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        "content-type": "text/html;charset=utf-8",
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "permissions-policy": "camera=(), geolocation=(), microphone=(self)",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "server": "cloudflare",
+        "strict-transport-security": "max-age=31536000",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-powered-by": null
+      }
+    },
+    {
+      "id": "CFT-004",
+      "title": "Production-strength CSP on the public tunnel",
+      "status": "FAIL",
+      "evidence": {
+        "unsafeEval": true,
+        "unsafeInline": true,
+        "unrestrictedWebSocketSchemes": true
+      }
+    },
+    {
+      "id": "CFT-005",
+      "title": "Plain HTTP redirects to the same HTTPS host",
+      "status": "FAIL",
+      "evidence": {
+        "status": 200,
+        "location": ""
+      }
+    },
+    {
+      "id": "CFT-006",
+      "title": "Protected APIs reject anonymous requests",
+      "status": "PASS",
+      "evidence": [
+        {
+          "route": "/api/auth/me",
+          "status": 401,
+          "code": "UNAUTHENTICATED"
+        },
+        {
+          "route": "/api/bovinos",
+          "status": 401,
+          "code": "UNAUTHENTICATED"
+        },
+        {
+          "route": "/api/observabilidad",
+          "status": 401,
+          "code": "UNAUTHENTICATED"
+        },
+        {
+          "route": "/api/conversations/by-user/security-audit",
+          "status": 401,
+          "code": "UNAUTHENTICATED"
+        }
+      ]
+    },
+    {
+      "id": "CFT-007",
+      "title": "Sensitive project files are not exposed",
+      "status": "PASS",
+      "evidence": [
+        {
+          "route": "/.env",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "responseBytes": 21,
+          "exposed": false
+        },
+        {
+          "route": "/.git/config",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "responseBytes": 28,
+          "exposed": false
+        },
+        {
+          "route": "/AI_CONTEXT.md",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "responseBytes": 30,
+          "exposed": false
+        },
+        {
+          "route": "/package.json",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "responseBytes": 29,
+          "exposed": false
+        },
+        {
+          "route": "/nuxt.config.ts",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "responseBytes": 31,
+          "exposed": false
+        },
+        {
+          "route": "/database/seeds.sql",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "responseBytes": 35,
+          "exposed": false
+        },
+        {
+          "route": "/server/utils/session.ts",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "responseBytes": 40,
+          "exposed": false
+        },
+        {
+          "route": "/security-audit/SECURITY_AUDIT_GANADERIA.md",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "responseBytes": 59,
+          "exposed": false
+        }
+      ]
+    },
+    {
+      "id": "CFT-008",
+      "title": "Development runtime is not publicly exposed",
+      "status": "FAIL",
+      "evidence": [
+        {
+          "route": "/@vite/client",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "runtimeCode": false
+        },
+        {
+          "route": "/_nuxt/@vite/client",
+          "status": 200,
+          "contentType": "text/javascript",
+          "runtimeCode": true
+        },
+        {
+          "route": "/__nuxt_vite_node__",
+          "status": 404,
+          "contentType": "text/plain; charset=utf-8",
+          "runtimeCode": false
+        }
+      ]
+    },
+    {
+      "id": "CFT-009",
+      "title": "TRACE is disabled",
+      "status": "PASS",
+      "evidence": {
+        "status": 405,
+        "allow": null
+      }
+    },
+    {
+      "id": "CFT-010",
+      "title": "Cross-site unsafe request is rejected",
+      "status": "PASS",
+      "evidence": {
+        "status": 403,
+        "code": "CROSS_SITE_REQUEST_BLOCKED"
+      }
+    },
+    {
+      "id": "CFT-011",
+      "title": "Cloudflare does not permit forwarded-host origin bypass",
+      "status": "FAIL",
+      "evidence": {
+        "status": 200,
+        "code": null
+      }
+    },
+    {
+      "id": "CFT-012",
+      "title": "Invalid login has a generic response and no session cookie",
+      "status": "PASS",
+      "evidence": {
+        "status": 401,
+        "code": "INVALID_CREDENTIALS",
+        "setCookiePresent": false
+      }
+    },
+    {
+      "id": "CFT-013",
+      "title": "Authenticated session cookie is hardened over the tunnel",
+      "status": "PASS",
+      "evidence": {
+        "status": 200,
+        "cookieName": "ganaderia_session",
+        "attributes": {
+          "httpOnly": true,
+          "secure": true,
+          "sameSiteStrict": true,
+          "pathRoot": true,
+          "hasMaxAge": true
+        },
+        "tokenRecorded": false
+      }
+    },
+    {
+      "id": "CFT-014",
+      "title": "Authenticated API works through Cloudflare",
+      "status": "PASS",
+      "evidence": {
+        "status": 200,
+        "returnedAuthenticatedUser": true
+      }
+    },
+    {
+      "id": "CFT-015",
+      "title": "Tampered session cookie is rejected",
+      "status": "PASS",
+      "evidence": {
+        "status": 401,
+        "code": "UNAUTHENTICATED"
+      }
+    },
+    {
+      "id": "CFT-016",
+      "title": "Authenticated WebSocket handshake works through Cloudflare",
+      "status": "PASS",
+      "evidence": {
+        "opened": true,
+        "readyEvent": true,
+        "timeout": false
+      }
+    },
+    {
+      "id": "CFT-017",
+      "title": "Anonymous API response does not grant cross-origin access",
+      "status": "PASS",
+      "evidence": {
+        "status": 401,
+        "accessControlAllowOrigin": null
+      }
+    },
+    {
+      "id": "CFT-018",
+      "title": "Server revokes a captured token after logout",
+      "status": "FAIL",
+      "evidence": {
+        "logoutStatus": 200,
+        "capturedTokenStatusAfterLogout": 200,
+        "tokenRecorded": false
+      }
+    }
+  ],
+  "summary": {
+    "executed": 18,
+    "passed": 13,
+    "failed": 5,
+    "runnerErrors": 0
+  }
+}

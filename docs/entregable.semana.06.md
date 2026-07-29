@@ -109,11 +109,22 @@ npx playwright show-report
 
 ## Exposicion publica
 
+Primero inicia el bundle Nitro de produccion y mantenlo activo. No expongas
+`npm run dev`, porque contiene Vite/HMR:
+
+```bash
+npm run tunnel:serve
+```
+
 ### Cloudflare Tunnel
 
 ```bash
-cloudflared tunnel --url http://localhost:3000
+npm run tunnel:quick
 ```
+
+El comando detecta automaticamente el subdominio temporal de Cloudflare y
+publica el build Nitro en `127.0.0.1:3001`. No se expone Vite en el puerto 3000
+ni se modifica `.env` cada vez que cambia la URL.
 
 URL publica:
 
@@ -124,7 +135,7 @@ PENDIENTE
 ### Ngrok
 
 ```bash
-ngrok http 3000
+ngrok http 3001
 ```
 
 URL publica:

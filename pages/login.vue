@@ -48,7 +48,11 @@ async function login() {
     usuario.value = response;
     localStorage.setItem("usuario", JSON.stringify(response));
     await navigateTo("/");
-  } catch {
+  } catch (error: any) {
+    if (error?.data?.message) {
+      errorMsg.value = error.data.message;
+      return;
+    }
     errorMsg.value = "Credenciales incorrectas. Verifica tu email y contraseña.";
   } finally {
     loading.value = false;

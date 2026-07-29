@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => runApi(async () => {
   const body = await readBody(event);
   const bovinoId = parseId(body?.bovino_id, "bovino_id");
   await requireOwnedBovino(bovinoId, userId);
-  const peso = positiveNumber(body?.peso, "El peso");
+  const peso = positiveNumber(body?.peso, "El peso", 2500);
   const fecha = optionalDate(body?.fecha, "La fecha") ?? new Date().toISOString().slice(0, 10);
   const rows = await sql`
     INSERT INTO pesos (bovino_id, peso, fecha)

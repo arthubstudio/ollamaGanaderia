@@ -12,7 +12,7 @@ La IA funciona con Ollama local. Usa un router principal que combina reglas, con
 
 Desde Semana 7, el endpoint principal delega en una arquitectura multiagente incremental: un router determinista clasifica cada turno como `direct`, `transactional` o `rag`; el agente transaccional reutiliza las tools existentes y el agente RAG usa busqueda hibrida, RRF y reranking local con fallback.
 
-El flujo actual incluye una capa determinista previa al LLM para clasificar intenciones frecuentes, extraer parametros, detectar datos faltantes, mantener acciones pendientes por conversacion y pedir confirmacion antes de cualquier escritura. La autenticacion usa una cookie de sesion firmada y HttpOnly; los endpoints obtienen `usuario_id` exclusivamente de esa sesion.
+El flujo actual incluye una capa determinista previa al LLM para clasificar intenciones frecuentes, extraer parametros, detectar datos faltantes, mantener acciones pendientes por conversacion y pedir confirmacion antes de cualquier escritura. La autenticacion usa una cookie v3 cifrada y HttpOnly; la sesion aleatoria se almacena como hash revocable en PostgreSQL y los endpoints obtienen `usuario_id` exclusivamente de esa sesion.
 
 ## Stack tecnologico
 
@@ -93,7 +93,7 @@ app/
     historial-propiedad/     Historial de propiedad
     transferencias/          Transferencias de propiedad
     dashboard/               Metricas del inicio
-    ia/                      Router IA, chat, tools y acciones
+    ia/                      Router IA, chat y evaluacion; las tools no son rutas publicas
     memories/                Memorias semanticas del usuario
     conversations/           Conversaciones y mensajes
     observabilidad/          Logs de IA
@@ -109,9 +109,15 @@ app/
     rag/advancedRagPipeline.ts     Top-10, reranking y Top-3 final
 
   server/utils/
-    session.ts               Sesion firmada y hash de contrasenas
+    session.ts               Sesiones v3 cifradas, persistentes, revocables y hash de contrasenas
     api.ts                   Normalizacion y errores seguros
     ownership.ts             Validacion de propiedad por usuario
+    iaRequest.ts             Validacion de preguntas y UUID de conversaciones
+    rateLimit.ts             Limites persistentes por IP, identidad y usuario
+    requestSecurity.ts       Validacion same-origin para metodos de escritura
+
+  server/middleware/
+    security.ts              Headers HTTP, no-cache y proteccion CSRF por origen
 
   server/services/
     ownershipTransfer.ts     Transferencias transaccionales
@@ -171,7 +177,7 @@ app/
 
 5. El frontend manda email y password a `/api/auth/login`.
 
-6. El backend busca el usuario, valida la password y crea una cookie de sesion firmada, HttpOnly y SameSite=Lax. Las contrasenas nuevas usan scrypt; las contrasenas legacy se actualizan al iniciar sesion.
+6. El backend limita intentos por IP/identidad, normaliza el costo de verificacion para evitar enumeracion por tiempo, valida la password y crea una cookie v3 cifrada, HttpOnly, SameSite=Strict y `Secure` bajo HTTPS confiable. La sesion se registra como hash en `auth_sessions`, dura hasta 12 horas, revoca sesiones anteriores de la cuenta y se elimina en logout. Las contrasenas usan scrypt.
 
 7. Si el login es correcto, el frontend guarda el usuario en:
    - `localStorage`
@@ -216,13 +222,16 @@ app/
 
 14. El chat usa streaming tipo SSE para pintar tokens y estados en tiempo real.
 
-15. El chat privado entre usuarios usa `/_ws/community`: autentica la cookie firmada durante el upgrade, persiste cada mensaje antes del acuse, publica cambios por WebSocket y recupera mensajes posteriores al ultimo cursor al reconectar.
+15. El chat privado entre usuarios usa `/_ws/community`: autentica la cookie de sesion durante el upgrade, persiste cada mensaje antes del acuse, publica cambios por WebSocket y recupera mensajes posteriores al ultimo cursor al reconectar.
+
+16. El middleware global agrega CSP, HSTS en HTTPS, proteccion contra clickjacking/MIME sniffing, politicas de permisos y no-cache para autenticacion, IA y observabilidad. Los metodos de escritura sin origen verificable, con un `Origin` externo o con `Sec-Fetch-Site: cross-site` se rechazan antes de ejecutar el endpoint.
 
 ## Base de datos y modelos
 
 Tablas principales:
 
 - `usuarios`: usuarios del sistema.
+- `auth_sessions`: hashes de sesiones activas, expiracion, revocacion y ultima actividad.
 - `bovinos`: animales registrados por usuario.
 - `duenos`: propietarios.
 - `ranchos`: ranchos o ubicaciones.
@@ -235,10 +244,11 @@ Tablas principales:
 - `enfermedades`: enfermedades, tratamientos y veterinario.
 - `ventas`: ventas de bovinos.
 - `semantic_contexts`: contexto textual y embedding por bovino.
-- `memories`: memorias personales del usuario con embedding.
+- `memories`: memorias personales no transferibles del usuario con embedding.
 - `conversations`: conversaciones de IA.
 - `conversation_messages`: mensajes de conversaciones.
 - `ai_logs`: observabilidad de prompts, respuestas, latencia, bloqueos y tools.
+- `security_rate_limits`: ventanas y contadores persistentes para limites por IP, usuario e identidad.
 - `requisitos_venta`: requisitos sanitarios para venta.
 - `breeds`: catalogo global y razas personalizadas.
 - `bovino_transfers`: solicitudes entre cuentas y estado permanente.
@@ -305,6 +315,10 @@ Scripts disponibles en `package.json`:
 ```bash
 npm run dev
 npm run build
+npm run start
+npm run tunnel:start
+npm run tunnel:serve
+npm run tunnel:quick
 npm run test
 npm run generate
 npm run preview
@@ -312,21 +326,45 @@ npm run postinstall
 npm run db:migrate:platform
 npm run db:migrate:improvements
 npm run db:migrate:websocket
+npm run db:migrate:security
+npm run db:migrate:security-remediation
+npm run db:migrate:account-security
+npm run db:runtime:configure
+npm run db:runtime:verify
+npm run admin:bootstrap
 npm run test:e2e:platform
 npm run test:e2e:improvements
 npm run test:e2e:chat
+npm run test:e2e:security
 ```
 
 ## Convenciones importantes
 
 - La entidad actual es `bovinos`, aunque todavia existen nombres heredados como `vacas` en componentes, comentarios y algunos textos.
 - Las rutas antiguas `/vacas` redirigen a `/bovinos`.
-- Algunas paginas todavia envian `usuario_id` por compatibilidad, pero el backend lo ignora y usa la sesion firmada.
+- Algunas paginas todavia envian `usuario_id` por compatibilidad, pero el backend lo ignora y usa la sesion autenticada.
+- Las preguntas de IA admiten como maximo 4096 caracteres; `conversation_id` debe ser un UUID valido antes de consultar PostgreSQL.
+- `/api/auth/login` limita intentos por IP e identidad. Todos los endpoints API tienen un limite global y los endpoints de IA conservan limites por usuario; los contadores viven en PostgreSQL y responden `429 RATE_LIMITED` con `Retry-After`.
+- El registro solicita unicamente nombre, correo electronico y contrasena; conserva validacion server-side, limite de 20 solicitudes por hora e IP y una respuesta identica para correos nuevos o existentes.
+- No se crean usuarios demo ni administradores conocidos. La migracion `009` bloquea las cuentas legacy publicadas y el administrador se crea explicitamente con `npm run admin:bootstrap`.
+- Las contrasenas nuevas deben tener entre 12 y 200 caracteres y se rechazan valores comunes, repeticiones y datos derivados de nombre/correo.
+- Las sesiones v3 son revocables, se guardan solo como hash, aplican una sesion activa por cuenta y no aceptan cookies legacy como autorizacion.
+- La observabilidad filtra por la sesion autenticada. Las cuentas normales reciben metricas con prompts, respuestas, sesion, agente, intencion y tools redactados; solo `admin` puede consultar esos detalles y las tools se reducen a `name` y `status`.
+- Para un Cloudflare Quick Tunnel se usa `npm run tunnel:quick`: el comando detecta la URL temporal e inyecta su origen y hostname exactos solo durante esa ejecucion. Para hosts estables se mantienen `NUXT_PUBLIC_APP_ORIGIN`, `NUXT_ALLOWED_HOSTS` y `npm run tunnel:serve`. Nunca se expone Vite en el puerto 3000 ni se usan `allowedHosts: true` o comodines `.trycloudflare.com`.
+- Las solicitudes mutables requieren `Origin` o `Referer` del mismo origen. Las cookies de sesion son `HttpOnly`, `SameSite=Strict` y `Secure` cuando la solicitud usa HTTPS.
+- La CSP de produccion no usa `unsafe-inline` ni `unsafe-eval`; Nitro calcula hashes SHA-256 para los scripts inline de hidratacion de cada respuesta HTML.
+- PostgreSQL, Ollama y el reranker se publican unicamente en `127.0.0.1`. La aplicacion usa `DATABASE_RUNTIME_URL` con un rol sin DDL; `DATABASE_MIGRATION_URL` se reserva para tareas administrativas y no hay credenciales fallback.
 - `localStorage` solo mantiene la representacion visual del usuario despues de validar `/api/auth/me`; no concede acceso a datos.
 - La pantalla `/login` limpia el estado local y cierra cualquier cookie de sesion previa para evitar que aparezca una cuenta activa en el formulario.
 - Todas las relaciones se validan contra el usuario autenticado antes de leer o escribir.
 - Las fechas vacias se convierten a `null`; IDs, numeros, fechas, enums y textos se normalizan en el servidor.
 - Los errores API se serializan sin SQL, parametros, stack traces ni rutas locales.
+- Los logs de errores usan `safeErrorDetails`: conservan solo tipo, codigo y estado; los mensajes 5xx nunca se devuelven al cliente.
+- Todas las APIs y las paginas de autenticacion usan `Cache-Control: private, no-store`.
+- El origen canonico usa el `Host` real; headers reenviados solo se confian desde un peer loopback cuando `NUXT_TRUST_PROXY=loopback`.
+- Las tools viven en `server/ai/tools`, no generan endpoints Nitro y las escrituras IA publicas requieren propuesta y confirmacion server-side.
+- Los logs IA conservan hashes, longitudes, metricas y nombres de tools permitidos durante 30 dias; no guardan prompts, respuestas, emails ni parametros crudos.
+- `semantic_contexts` exige propietario/alcance/fuente/confianza y el RAG solo recupera contexto privado propio o publico explicitamente confiable.
 - Para llamadas de lectura se usa normalmente `useFetch`.
 - Para acciones de escritura se usa normalmente `$fetch`.
 - Para el chat IA con streaming se usa `fetch` nativo.
@@ -372,9 +410,11 @@ npm run test:e2e:chat
 
 ## Pendientes o riesgos detectados
 
-- Los usuarios legacy de seeds conservan inicialmente contrasenas en texto plano, pero se migran a scrypt en su siguiente login.
-- La sesion es stateless y firmada; no existe revocacion central antes de su expiracion de 12 horas.
-- Las credenciales de PostgreSQL estan hardcodeadas en varios archivos.
+- El flujo `npm run tunnel:quick` se verifico el 2026-07-29 con un hostname Cloudflare nuevo: detecto la URL dinamica, inicio exclusivamente Nitro y `/login` respondio HTTP 200 sin bloqueo de host. La puntuacion tecnica sigue provisional hasta repetir la matriz externa completa de redirect, HSTS, CSP, cookies, WebSocket y ausencia de rutas Vite.
+- El perfil opcional del reranker esta endurecido, pero no se construyo ni descargo el modelo pesado durante la auditoria autorizada; falta validarlo y generar SBOM/escaneo de imagen en CI.
+- El registro publico no verifica la propiedad del correo electronico ni usa CAPTCHA. Para un despliegue abierto de produccion se recomienda integrar verificacion por correo y controles antiabuso adicionales.
+- Las credenciales y el secreto de sesion dependen de `.env`; cada despliegue debe usar valores largos, distintos y fuera del control de versiones.
+- PostgreSQL no usa RLS. El aislamiento actual combina rol runtime sin privilegios y ownership en aplicacion; RLS queda como defensa adicional futura que requiere una migracion cuidadosamente probada.
 - Hay mezcla de Drizzle y SQL directo, lo que puede complicar mantenimiento.
 - `database/schema.sql`, `database/seeds.sql` y `drizzle/schema.ts` no estan completamente sincronizados.
 - `memories` ya declara `slot`, `tipo` y `updated_at` en Drizzle, aunque los tres esquemas aun deben mantenerse sincronizados manualmente.
@@ -385,7 +425,6 @@ npm run test:e2e:chat
 - El estado multi-turno de acciones pendientes es temporal en memoria; no sobrevive reinicios ni multiples instancias del servidor.
 - El planner cubre las intenciones principales, pero operaciones menos usadas pueden seguir cayendo al function calling legacy.
 - La secuencia automatica de aretes ya evita reutilizar consecutivos por usuario; aun falta automatizar una prueba de concurrencia de base de datos en CI.
-- Varias tools legacy aun crean su propio cliente PostgreSQL con credenciales locales; los endpoints principales ya usan `DATABASE_URL`, pero falta terminar esa unificacion.
 - El modelo `BAAI/bge-reranker-v2-m3` es pesado; el servicio es opcional y se activa con el perfil Compose `reranker`.
 - No existen metricas oficiales de Semana 7 hasta ejecutar `npm run evaluate:agent` en el entorno de entrega.
 - El catalogo inicial incluye 50 razas principales, no un censo mundial exhaustivo de 800-900 razas.

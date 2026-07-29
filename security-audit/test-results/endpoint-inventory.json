@@ -1,0 +1,2100 @@
+{
+  "generated_at": "2026-07-29T08:22:16.360Z",
+  "endpoint_count": 122,
+  "api_file_count": 93,
+  "internal_tool_module_count": 28,
+  "global_controls": [
+    "Origin/Referer validation for unsafe HTTP methods",
+    "Persistent PostgreSQL-backed global rate limiting",
+    "Security headers through server/middleware/security.ts",
+    "Encrypted HttpOnly session cookie"
+  ],
+  "endpoints": [
+    {
+      "method": "POST",
+      "route": "/api/auth/login",
+      "file": "server/api/auth/login.post.ts",
+      "authentication": "not declared in route",
+      "authorization": "public",
+      "role_check": true,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "public",
+        "route-rate-limit",
+        "role-aware",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/logout",
+      "file": "server/api/auth/logout.post.ts",
+      "authentication": "not declared in route",
+      "authorization": "public",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "public",
+        "global-rate-limit"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/auth/me",
+      "file": "server/api/auth/me.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": true,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "role-aware",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/auth/register",
+      "file": "server/api/auth/register.post.ts",
+      "authentication": "not declared in route",
+      "authorization": "public",
+      "role_check": true,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "public",
+        "route-rate-limit",
+        "role-aware",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/bovinos/:id",
+      "file": "server/api/bovinos/[id]/index.delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/bovinos/:id",
+      "file": "server/api/bovinos/[id]/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/bovinos/:id",
+      "file": "server/api/bovinos/[id]/index.put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/bovinos/:id/ownership-history",
+      "file": "server/api/bovinos/[id]/ownership-history.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/bovinos",
+      "file": "server/api/bovinos/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/bovinos",
+      "file": "server/api/bovinos/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/breeds/:id",
+      "file": "server/api/breeds/[id].put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": true,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "role-aware",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/breeds",
+      "file": "server/api/breeds/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/breeds",
+      "file": "server/api/breeds/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/community/conversations/:id/messages",
+      "file": "server/api/community/conversations/[id]/messages.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/community/conversations/:id/messages",
+      "file": "server/api/community/conversations/[id]/messages.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/community/conversations/:id/read",
+      "file": "server/api/community/conversations/[id]/read.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/community/conversations/:id/stream",
+      "file": "server/api/community/conversations/[id]/stream.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "sse"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/community/conversations",
+      "file": "server/api/community/conversations/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/community/conversations",
+      "file": "server/api/community/conversations/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/community/friends",
+      "file": "server/api/community/friends/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/community/friends/requests/:id/accept",
+      "file": "server/api/community/friends/requests/[id]/accept.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/community/friends/requests/:id/reject",
+      "file": "server/api/community/friends/requests/[id]/reject.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/community/friends/requests",
+      "file": "server/api/community/friends/requests/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/community/friends/requests",
+      "file": "server/api/community/friends/requests/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/community/messages",
+      "file": "server/api/community/messages/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/community/stream",
+      "file": "server/api/community/stream.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "sse"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/conversations/:id/messages",
+      "file": "server/api/conversations/[id]/messages.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/conversations/by-user/:id",
+      "file": "server/api/conversations/by-user/[id].get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/conversations/by-user/test",
+      "file": "server/api/conversations/by-user/test.get.ts",
+      "authentication": "not declared in route",
+      "authorization": "public",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "public",
+        "global-rate-limit"
+      ],
+      "notes": "Unauthenticated diagnostic route returning {ok:true}."
+    },
+    {
+      "method": "POST",
+      "route": "/api/conversations/create",
+      "file": "server/api/conversations/create.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/dashboard",
+      "file": "server/api/dashboard/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/duenos/:id",
+      "file": "server/api/duenos/[id]/index.delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/duenos/:id",
+      "file": "server/api/duenos/[id]/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/duenos/:id",
+      "file": "server/api/duenos/[id]/index.put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/duenos",
+      "file": "server/api/duenos/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/duenos",
+      "file": "server/api/duenos/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/enfermedades/:id",
+      "file": "server/api/enfermedades/[id].delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/enfermedades/:id",
+      "file": "server/api/enfermedades/[id].put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/enfermedades",
+      "file": "server/api/enfermedades/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/enfermedades",
+      "file": "server/api/enfermedades/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/historial-propiedad/:id",
+      "file": "server/api/historial-propiedad/[id].delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/historial-propiedad/:id",
+      "file": "server/api/historial-propiedad/[id].put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/historial-propiedad",
+      "file": "server/api/historial-propiedad/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/historial-propiedad",
+      "file": "server/api/historial-propiedad/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/ia/buscar",
+      "file": "server/api/ia/buscar.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/ia/chat",
+      "file": "server/api/ia/chat.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "route-rate-limit",
+        "ownership-or-user-scope",
+        "prompt-guardrail"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/ia/evaluate",
+      "file": "server/api/ia/evaluate.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "route-rate-limit",
+        "ownership-or-user-scope",
+        "prompt-guardrail"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/ia/function-calling",
+      "file": "server/api/ia/function-calling.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "route-rate-limit",
+        "ownership-or-user-scope",
+        "prompt-guardrail"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/ia/router",
+      "file": "server/api/ia/router.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "route-rate-limit",
+        "ownership-or-user-scope",
+        "prompt-guardrail",
+        "sse"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/ia/venta",
+      "file": "server/api/ia/venta.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/memories/:id",
+      "file": "server/api/memories/[id].delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/memories/:id",
+      "file": "server/api/memories/[id].put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/memories/create",
+      "file": "server/api/memories/create.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/memories",
+      "file": "server/api/memories/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/memories/retrieve",
+      "file": "server/api/memories/retrieve.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/memories/search",
+      "file": "server/api/memories/search.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/notifications/:id/read",
+      "file": "server/api/notifications/[id]/read.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications",
+      "file": "server/api/notifications/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/notifications/read-all",
+      "file": "server/api/notifications/read-all.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/notifications/stream",
+      "file": "server/api/notifications/stream.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "sse"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/observabilidad/activity",
+      "file": "server/api/observabilidad/activity.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/observabilidad",
+      "file": "server/api/observabilidad/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": true,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "role-aware",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/pesos/:id",
+      "file": "server/api/pesos/[id].delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/pesos/:id",
+      "file": "server/api/pesos/[id].put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/pesos",
+      "file": "server/api/pesos/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/pesos",
+      "file": "server/api/pesos/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/ranchos/:id",
+      "file": "server/api/ranchos/[id]/index.delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/ranchos/:id",
+      "file": "server/api/ranchos/[id]/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/ranchos/:id",
+      "file": "server/api/ranchos/[id]/index.put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/ranchos",
+      "file": "server/api/ranchos/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/ranchos",
+      "file": "server/api/ranchos/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/reindexar",
+      "file": "server/api/reindexar.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/test",
+      "file": "server/api/test.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/transferencias",
+      "file": "server/api/transferencias/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/transfers/:id/accept",
+      "file": "server/api/transfers/[id]/accept.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/transfers/:id/cancel",
+      "file": "server/api/transfers/[id]/cancel.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/transfers/:id/reject",
+      "file": "server/api/transfers/[id]/reject.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/transfers",
+      "file": "server/api/transfers/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/transfers",
+      "file": "server/api/transfers/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/users/search",
+      "file": "server/api/users/search.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/vacunas-aplicadas/:id",
+      "file": "server/api/vacunas-aplicadas/[id].delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/vacunas-aplicadas/:id",
+      "file": "server/api/vacunas-aplicadas/[id].put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/vacunas-aplicadas",
+      "file": "server/api/vacunas-aplicadas/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/vacunas-aplicadas",
+      "file": "server/api/vacunas-aplicadas/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/vacunas/:id",
+      "file": "server/api/vacunas/[id]/index.delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/vacunas/:id",
+      "file": "server/api/vacunas/[id]/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/vacunas/:id",
+      "file": "server/api/vacunas/[id]/index.put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/vacunas",
+      "file": "server/api/vacunas/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/vacunas",
+      "file": "server/api/vacunas/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "DELETE",
+      "route": "/api/ventas/:id",
+      "file": "server/api/ventas/[id].delete.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "PUT",
+      "route": "/api/ventas/:id",
+      "file": "server/api/ventas/[id].put.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body",
+        "path"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "GET",
+      "route": "/api/ventas",
+      "file": "server/api/ventas/index.get.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "query"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/ventas",
+      "file": "server/api/ventas/index.post.ts",
+      "authentication": "required",
+      "authorization": "route/service user scoping detected",
+      "role_check": false,
+      "input_sources": [
+        "body"
+      ],
+      "controls": [
+        "session",
+        "global-rate-limit",
+        "ownership-or-user-scope",
+        "normalized-errors"
+      ],
+      "notes": null
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/actualizarBovino",
+      "file": "server/api/ia/tools/actualizarBovino.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/actualizarEnfermedad",
+      "file": "server/api/ia/tools/actualizarEnfermedad.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/aplicarVacuna",
+      "file": "server/api/ia/tools/aplicarVacuna.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/crearBovino",
+      "file": "server/api/ia/tools/crearBovino.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/crearDueno",
+      "file": "server/api/ia/tools/crearDueno.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/crearRancho",
+      "file": "server/api/ia/tools/crearRancho.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/crearVacuna",
+      "file": "server/api/ia/tools/crearVacuna.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/eliminarBovino",
+      "file": "server/api/ia/tools/eliminarBovino.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/eliminarDueno",
+      "file": "server/api/ia/tools/eliminarDueno.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/eliminarEnfermedad",
+      "file": "server/api/ia/tools/eliminarEnfermedad.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/eliminarRancho",
+      "file": "server/api/ia/tools/eliminarRancho.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/eliminarVacuna",
+      "file": "server/api/ia/tools/eliminarVacuna.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/eliminarVacunaAplicada",
+      "file": "server/api/ia/tools/eliminarVacunaAplicada.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/findBovino",
+      "file": "server/api/ia/tools/findBovino.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/getEdad",
+      "file": "server/api/ia/tools/getEdad.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/getEnfermedades",
+      "file": "server/api/ia/tools/getEnfermedades.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/getEstado",
+      "file": "server/api/ia/tools/getEstado.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/getHistorial",
+      "file": "server/api/ia/tools/getHistorial.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/getPeso",
+      "file": "server/api/ia/tools/getPeso.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/getResumen",
+      "file": "server/api/ia/tools/getResumen.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/getVacunas",
+      "file": "server/api/ia/tools/getVacunas.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/getVenta",
+      "file": "server/api/ia/tools/getVenta.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/platformTools",
+      "file": "server/api/ia/tools/platformTools.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/quitarPropiedad",
+      "file": "server/api/ia/tools/quitarPropiedad.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/registrarEnfermedad",
+      "file": "server/api/ia/tools/registrarEnfermedad.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/registrarPeso",
+      "file": "server/api/ia/tools/registrarPeso.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/registrarVenta",
+      "file": "server/api/ia/tools/registrarVenta.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "ANY",
+      "route": "/api/ia/tools/transferirPropiedad",
+      "file": "server/api/ia/tools/transferirPropiedad.ts",
+      "authentication": "no event handler declared in source module",
+      "authorization": "named tool function expects a userId argument; no HTTP boundary is defined",
+      "role_check": false,
+      "input_sources": [],
+      "controls": [
+        "named-export-only",
+        "runtime-behavior-tested-separately"
+      ],
+      "notes": "Nitro production build nevertheless registers this module as an HTTP route because it lives under server/api."
+    },
+    {
+      "method": "WS",
+      "route": "/_ws/community",
+      "file": "server/plugins/community-websocket.ts",
+      "authentication": "required during WebSocket upgrade",
+      "authorization": "conversation membership checked for subscribe/send/read",
+      "role_check": false,
+      "input_sources": [
+        "websocket-event"
+      ],
+      "controls": [
+        "encrypted-session-token",
+        "participant-check",
+        "message-deduplication"
+      ],
+      "notes": "No event-level request-size or rate-limit control detected."
+    }
+  ],
+  "tool_modules_registered_as_routes": [
+    "server/api/ia/tools/actualizarBovino.ts",
+    "server/api/ia/tools/actualizarEnfermedad.ts",
+    "server/api/ia/tools/aplicarVacuna.ts",
+    "server/api/ia/tools/crearBovino.ts",
+    "server/api/ia/tools/crearDueno.ts",
+    "server/api/ia/tools/crearRancho.ts",
+    "server/api/ia/tools/crearVacuna.ts",
+    "server/api/ia/tools/eliminarBovino.ts",
+    "server/api/ia/tools/eliminarDueno.ts",
+    "server/api/ia/tools/eliminarEnfermedad.ts",
+    "server/api/ia/tools/eliminarRancho.ts",
+    "server/api/ia/tools/eliminarVacuna.ts",
+    "server/api/ia/tools/eliminarVacunaAplicada.ts",
+    "server/api/ia/tools/findBovino.ts",
+    "server/api/ia/tools/getEdad.ts",
+    "server/api/ia/tools/getEnfermedades.ts",
+    "server/api/ia/tools/getEstado.ts",
+    "server/api/ia/tools/getHistorial.ts",
+    "server/api/ia/tools/getPeso.ts",
+    "server/api/ia/tools/getResumen.ts",
+    "server/api/ia/tools/getVacunas.ts",
+    "server/api/ia/tools/getVenta.ts",
+    "server/api/ia/tools/platformTools.ts",
+    "server/api/ia/tools/quitarPropiedad.ts",
+    "server/api/ia/tools/registrarEnfermedad.ts",
+    "server/api/ia/tools/registrarPeso.ts",
+    "server/api/ia/tools/registrarVenta.ts",
+    "server/api/ia/tools/transferirPropiedad.ts"
+  ]
+}

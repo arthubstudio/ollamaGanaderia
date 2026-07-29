@@ -1,5 +1,6 @@
 import { hybridSearch } from "~/server/ai/rag/hybridSearch";
 import { rerankLocally } from "~/server/ai/rag/rerankerClient";
+import { safeErrorDetails } from "~/server/utils/safeLogging";
 
 export type RagMetrics = {
   retrievedCount: number;
@@ -38,7 +39,7 @@ export async function runAdvancedRagPipeline(params: {
       });
       rerankerUsed = true;
     } catch (error: any) {
-      rerankerFallback = String(error?.message ?? error);
+      rerankerFallback = safeErrorDetails(error).error_code;
     }
   }
 
@@ -57,4 +58,3 @@ export async function runAdvancedRagPipeline(params: {
     metrics
   };
 }
-

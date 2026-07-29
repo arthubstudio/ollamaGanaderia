@@ -38,9 +38,12 @@ Las puntuaciones y latencias se calculan solo con ejecuciones reales. No deben c
 
 ```text
 EVAL_BASE_URL=http://localhost:3000
-EVAL_EMAIL=pedro@gmail.com
-EVAL_PASSWORD=123456
+EVAL_EMAIL=cuenta.de.prueba@tu-dominio.test
+EVAL_PASSWORD=contrasena-propia-larga
 JUDGE_MODEL=llama3.2:latest
 CHAT_MODEL=llama3.2:latest
 ```
 
+El evaluador no incluye credenciales predeterminadas. Registra una cuenta de prueba
+propia y configura ambas variables; si faltan, el script se detiene antes de crear
+un reporte incompleto.

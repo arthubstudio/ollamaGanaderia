@@ -27,8 +27,8 @@ async function register() {
     return;
   }
 
-  if (password.value.length < 6) {
-    error.value = "La contraseña debe tener al menos 6 caracteres.";
+  if (password.value.length < 12) {
+    error.value = "La contrasena debe tener al menos 12 caracteres.";
     return;
   }
 
@@ -57,7 +57,7 @@ async function register() {
     }, 2500);
   } catch (err: any) {
     error.value =
-      err?.data?.statusMessage ?? "Error al registrar usuario";
+      err?.data?.message ?? err?.data?.statusMessage ?? "Error al registrar usuario";
   } finally {
     loading.value = false;
   }
@@ -76,10 +76,10 @@ async function register() {
         class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-center"
       >
         <p class="font-semibold text-emerald-800">
-          ¡Cuenta creada exitosamente!
+          Registro procesado
         </p>
         <p class="text-sm text-emerald-700 mt-1">
-          Redirigiendo al inicio de sesión...
+          Redirigiendo al inicio de sesion...
         </p>
       </div>
 
@@ -103,6 +103,8 @@ async function register() {
         <input
           v-model="password"
           type="password"
+          minlength="12"
+          maxlength="200"
           placeholder="Contraseña"
           :disabled="success"
           class="w-full border border-gray-300 rounded-xl p-3 outline-none focus:border-black disabled:opacity-60"
@@ -113,7 +115,7 @@ async function register() {
           class="w-full bg-black text-white py-3 rounded-xl hover:bg-gray-800 disabled:opacity-50"
           @click="register"
         >
-          {{ loading ? "Creando cuenta..." : success ? "Cuenta creada" : "Registrarme" }}
+          {{ loading ? "Procesando..." : success ? "Registro procesado" : "Registrarme" }}
         </button>
 
         <div

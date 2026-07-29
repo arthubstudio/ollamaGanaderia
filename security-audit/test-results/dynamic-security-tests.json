@@ -1,0 +1,814 @@
+{
+  "title": "Dynamic defensive security tests - Ganaderia AI",
+  "started_at": "2026-07-29T08:14:35.273Z",
+  "finished_at": "2026-07-29T08:16:57.236Z",
+  "scope": {
+    "application": "http://127.0.0.1:3201",
+    "database": "127.0.0.1:55433/ganaderia_ai_security_test",
+    "data": "Synthetic .example.test identities only",
+    "prohibited": [
+      "production",
+      "public tunnels",
+      "external hosts",
+      "destructive load tests"
+    ]
+  },
+  "tests": [
+    {
+      "id": "DB-ROLE-001",
+      "category": "database",
+      "objective": "Verify that the application database role follows least privilege.",
+      "status": "FAIL",
+      "control_expected": "Application role is not superuser and cannot create roles/databases.",
+      "duration_ms": 6,
+      "evidence": {
+        "rolsuper": true,
+        "rolcreatedb": true,
+        "rolcreaterole": true
+      }
+    },
+    {
+      "id": "AUTH-001",
+      "category": "authentication",
+      "objective": "Reject access to an authenticated endpoint without a session.",
+      "status": "PASS",
+      "control_expected": "GET /api/auth/me returns 401.",
+      "duration_ms": 22,
+      "evidence": {
+        "status": 401,
+        "code": "UNAUTHENTICATED"
+      }
+    },
+    {
+      "id": "AUTH-002",
+      "category": "authentication",
+      "objective": "Register a synthetic user with a strong password.",
+      "status": "PASS",
+      "control_expected": "Registration returns the generic 202 response.",
+      "duration_ms": 59,
+      "evidence": {
+        "status": 202,
+        "body": {
+          "success": true,
+          "message": "Si los datos son validos, el registro fue procesado. Ya puedes intentar iniciar sesion."
+        }
+      }
+    },
+    {
+      "id": "AUTH-003",
+      "category": "authentication",
+      "objective": "Prevent role mass assignment during registration.",
+      "status": "PASS",
+      "control_expected": "Requested admin role is ignored and stored role remains usuario.",
+      "duration_ms": 3,
+      "evidence": {
+        "registration_status": 202,
+        "stored_role": "usuario"
+      }
+    },
+    {
+      "id": "AUTH-004",
+      "category": "authentication",
+      "objective": "Avoid account enumeration through duplicate registration.",
+      "status": "PASS",
+      "control_expected": "New and duplicate registration responses are indistinguishable.",
+      "duration_ms": 48,
+      "evidence": {
+        "initial_status": 202,
+        "duplicate_status": 202,
+        "same_body": true
+      }
+    },
+    {
+      "id": "AUTH-005",
+      "category": "authentication",
+      "objective": "Reject malformed email addresses.",
+      "status": "PASS",
+      "control_expected": "Registration returns 400 INVALID_EMAIL.",
+      "duration_ms": 11,
+      "evidence": {
+        "status": 400,
+        "code": "INVALID_EMAIL"
+      }
+    },
+    {
+      "id": "AUTH-006",
+      "category": "authentication",
+      "objective": "Enforce a production-grade password policy.",
+      "status": "FAIL",
+      "control_expected": "A six-character password is rejected as weak.",
+      "duration_ms": 52,
+      "evidence": {
+        "status": 202,
+        "six_character_credential_accepted": true
+      }
+    },
+    {
+      "id": "AUTH-007",
+      "category": "authentication",
+      "objective": "Return indistinguishable errors for unknown users and wrong passwords.",
+      "status": "PASS",
+      "control_expected": "Both attempts return the same 401 code and message.",
+      "duration_ms": 91,
+      "evidence": {
+        "wrong_status": 401,
+        "unknown_status": 401,
+        "same_public_error": true
+      }
+    },
+    {
+      "id": "AUTH-008",
+      "category": "authentication",
+      "objective": "Set hardened session-cookie attributes.",
+      "status": "PASS",
+      "control_expected": "Cookie is HttpOnly and SameSite=Strict; Secure is environment-aware on local HTTP.",
+      "duration_ms": 0,
+      "evidence": {
+        "status": 200,
+        "http_only": true,
+        "same_site_strict": true,
+        "secure_present": false,
+        "tested_over_https": false
+      }
+    },
+    {
+      "id": "AUTH-009",
+      "category": "authentication",
+      "objective": "Reject a tampered encrypted session cookie.",
+      "status": "PASS",
+      "control_expected": "Tampered cookie returns 401 without technical details.",
+      "duration_ms": 8,
+      "evidence": {
+        "status": 401,
+        "code": "UNAUTHENTICATED"
+      }
+    },
+    {
+      "id": "AUTH-010",
+      "category": "authentication",
+      "objective": "Invalidate a captured session token after logout.",
+      "status": "FAIL",
+      "control_expected": "Replaying the pre-logout cookie is rejected.",
+      "duration_ms": 11,
+      "evidence": {
+        "logout_status": 200,
+        "replay_status": 200,
+        "replay_remained_valid": true
+      }
+    },
+    {
+      "id": "AUTH-011",
+      "category": "authentication",
+      "objective": "Rotate or revoke older sessions when the same account logs in again.",
+      "status": "FAIL",
+      "control_expected": "Session policy explicitly controls concurrent tokens; older token should not remain silently valid for high-risk use.",
+      "duration_ms": 19,
+      "evidence": {
+        "first_session_status": 200,
+        "second_session_status": 200,
+        "concurrent_sessions_valid": true
+      }
+    },
+    {
+      "id": "ERR-001",
+      "category": "errors-and-logging",
+      "objective": "Handle malformed JSON without leaking internals.",
+      "status": "PASS",
+      "control_expected": "400 response does not contain stack traces, SQL, or local paths.",
+      "duration_ms": 7,
+      "evidence": {
+        "status": 400,
+        "technical_detail_leaked": false
+      }
+    },
+    {
+      "id": "WEB-001",
+      "category": "web-security",
+      "objective": "Expose baseline browser-security headers.",
+      "status": "PASS",
+      "control_expected": "CSP, frame denial, nosniff, referrer, permissions, COOP/CORP are present and framework fingerprint is absent.",
+      "duration_ms": 8,
+      "evidence": {
+        "status": 200,
+        "csp_present": true,
+        "x_frame_options": "DENY",
+        "x_content_type_options": "nosniff",
+        "referrer_policy": "strict-origin-when-cross-origin",
+        "permissions_policy_present": true,
+        "coop": "same-origin",
+        "corp": "same-origin",
+        "x_powered_by_present": false,
+        "hsts_expected_on_local_http": false
+      }
+    },
+    {
+      "id": "WEB-002",
+      "category": "web-security",
+      "objective": "Block unsafe cross-origin requests.",
+      "status": "PASS",
+      "control_expected": "Foreign Origin receives 403.",
+      "duration_ms": 4,
+      "evidence": {
+        "status": 403,
+        "code": "CROSS_SITE_REQUEST_BLOCKED"
+      }
+    },
+    {
+      "id": "WEB-003",
+      "category": "web-security",
+      "objective": "Do not trust client-supplied forwarded host metadata for CSRF decisions.",
+      "status": "FAIL",
+      "control_expected": "Spoofed X-Forwarded-Host cannot make a foreign Origin appear same-origin.",
+      "duration_ms": 8,
+      "evidence": {
+        "status": 200,
+        "spoofed_forwarded_host_accepted": true
+      }
+    },
+    {
+      "id": "WEB-004",
+      "category": "web-security",
+      "objective": "Reject arbitrary Host headers in the development server.",
+      "status": "PASS",
+      "control_expected": "An unrelated Host is blocked.",
+      "duration_ms": 8,
+      "evidence": {
+        "status": 403
+      }
+    },
+    {
+      "id": "WEB-005",
+      "category": "web-security",
+      "objective": "Avoid a broad wildcard for shared Cloudflare development hostnames.",
+      "status": "FAIL",
+      "control_expected": "An arbitrary *.trycloudflare.com Host is not accepted by the Vite development server.",
+      "duration_ms": 41,
+      "evidence": {
+        "status": 200,
+        "arbitrary_trycloudflare_host_accepted": true
+      }
+    },
+    {
+      "id": "WEB-006",
+      "category": "web-security",
+      "objective": "Mark authenticated data as non-cacheable by shared intermediaries.",
+      "status": "FAIL",
+      "control_expected": "Sensitive GET responses include private/no-store cache policy.",
+      "duration_ms": 19,
+      "evidence": {
+        "status": 200,
+        "cache_control": null
+      }
+    },
+    {
+      "id": "WEB-007",
+      "category": "web-security",
+      "objective": "Keep diagnostic API routes private.",
+      "status": "FAIL",
+      "control_expected": "Unauthenticated diagnostic endpoint is absent or requires authentication.",
+      "duration_ms": 10,
+      "evidence": {
+        "status": 200,
+        "response": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "id": "WEB-008",
+      "category": "web-security",
+      "objective": "Do not let callers choose the trusted client IP header directly.",
+      "status": "FAIL",
+      "control_expected": "Changing CF-Connecting-IP outside a trusted proxy does not reset the same caller's rate-limit bucket.",
+      "duration_ms": 19,
+      "evidence": {
+        "first_status": 200,
+        "second_status": 200,
+        "first_remaining": "179",
+        "second_remaining": "179",
+        "caller_controlled_header_changed_bucket": true
+      }
+    },
+    {
+      "id": "VAL-001",
+      "category": "input-validation",
+      "objective": "Create a valid bovino without accepting a caller-supplied identifier or owner.",
+      "status": "PASS",
+      "control_expected": "Endpoint creates a user-scoped bovino and generates its arete.",
+      "duration_ms": 3,
+      "evidence": {
+        "status": 200,
+        "owner_is_session_user": true,
+        "generated_arete_format": true
+      }
+    },
+    {
+      "id": "AUTHZ-001",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through GET /api/bovinos/2.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 9,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-002",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through PUT /api/bovinos/2.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 9,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-003",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through GET /api/duenos/1.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 10,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-004",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through PUT /api/duenos/1.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 10,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-005",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through GET /api/ranchos/1.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 12,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-006",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through GET /api/pesos.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 11,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-007",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through PUT /api/pesos/1.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 10,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-008",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through GET /api/enfermedades.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 11,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-009",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through PUT /api/enfermedades/1.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 8,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-010",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through GET /api/vacunas/13.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 10,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-011",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through GET /api/ventas.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 9,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-012",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through PUT /api/ventas/1.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 11,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-013",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through PUT /api/memories/1.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 45,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-014",
+      "category": "authorization",
+      "objective": "Prevent user A from accessing user B resource through GET /api/conversations/9c9bf4e7-cbc8-41ac-8778-b8d09f367786/messages.",
+      "status": "PASS",
+      "control_expected": "Cross-account access returns 403 or 404 and does not mutate the target.",
+      "duration_ms": 11,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-015",
+      "category": "authorization",
+      "objective": "Restrict community conversation reads to participants.",
+      "status": "PASS",
+      "control_expected": "Outsider receives 404.",
+      "duration_ms": 17,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-016",
+      "category": "authorization",
+      "objective": "Restrict community conversation writes to participants.",
+      "status": "PASS",
+      "control_expected": "Outsider cannot send a message.",
+      "duration_ms": 20,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "AUTHZ-017",
+      "category": "authorization",
+      "objective": "Reject a user_id mismatch in the non-streaming AI evaluator.",
+      "status": "PASS",
+      "control_expected": "Authenticated user A cannot evaluate as user B.",
+      "duration_ms": 13,
+      "evidence": {
+        "status": 403,
+        "code": "FORBIDDEN"
+      }
+    },
+    {
+      "id": "AUTHZ-018",
+      "category": "authorization",
+      "objective": "Prevent a regular user from editing a global breed.",
+      "status": "PASS",
+      "control_expected": "Regular user receives 403.",
+      "duration_ms": 13,
+      "evidence": {
+        "status": 403,
+        "code": "FORBIDDEN"
+      }
+    },
+    {
+      "id": "AUTHZ-019",
+      "category": "authorization",
+      "objective": "Allow an administrator to maintain the global breed catalog.",
+      "status": "PASS",
+      "control_expected": "Admin update succeeds.",
+      "duration_ms": 16,
+      "evidence": {
+        "status": 200
+      }
+    },
+    {
+      "id": "PRIV-001",
+      "category": "privacy",
+      "objective": "Limit authenticated user-directory search to minimum necessary personal data.",
+      "status": "FAIL",
+      "control_expected": "Broad one-term search does not enumerate other users' full email addresses.",
+      "duration_ms": 11,
+      "evidence": {
+        "status": 200,
+        "returned_rows": 2,
+        "other_full_emails_returned": [
+          "audit-admin@example.test",
+          "audit-user-b@example.test"
+        ]
+      }
+    },
+    {
+      "id": "VAL-002",
+      "category": "input-validation",
+      "objective": "Reject negative weights.",
+      "status": "PASS",
+      "control_expected": "Negative value returns 400.",
+      "duration_ms": 8,
+      "evidence": {
+        "status": 400,
+        "code": "INVALID_NUMBER"
+      }
+    },
+    {
+      "id": "VAL-003",
+      "category": "input-validation",
+      "objective": "Reject physically implausible bovine weights.",
+      "status": "FAIL",
+      "control_expected": "An extreme 999999 kg value is rejected.",
+      "duration_ms": 220,
+      "evidence": {
+        "status": 200,
+        "accepted_extreme_weight": true
+      }
+    },
+    {
+      "id": "VAL-004",
+      "category": "input-validation",
+      "objective": "Apply a consistent maximum length to memory creation.",
+      "status": "FAIL",
+      "control_expected": "A 6000-character memory is rejected before embedding/database work.",
+      "duration_ms": 2998,
+      "evidence": {
+        "status": 200,
+        "accepted_characters": 6000
+      }
+    },
+    {
+      "id": "VAL-005",
+      "category": "input-validation",
+      "objective": "Handle SQL metacharacters as data in directory search.",
+      "status": "PASS",
+      "control_expected": "Query is parameterized and causes neither SQL error nor bulk disclosure.",
+      "duration_ms": 22,
+      "evidence": {
+        "status": 200,
+        "rows_returned": 0
+      }
+    },
+    {
+      "id": "AI-001",
+      "category": "ai-rag-security",
+      "objective": "Block a direct prompt-injection attempt.",
+      "status": "PASS",
+      "control_expected": "Evaluator marks request blocked and does not execute business tools.",
+      "duration_ms": 21,
+      "evidence": {
+        "status": 200,
+        "blocked": true,
+        "route": {
+          "agent": "direct",
+          "intent": "security_block",
+          "confidence": 1,
+          "reason": "El guardrail detecto una instruccion potencialmente peligrosa."
+        },
+        "tools_executed": [
+          "guardrail.prompt_injection"
+        ]
+      }
+    },
+    {
+      "id": "AI-002",
+      "category": "ai-rag-security",
+      "objective": "Reject an arbitrary SQL execution request.",
+      "status": "PASS",
+      "control_expected": "Request is blocked and no SQL tool is executed.",
+      "duration_ms": 26,
+      "evidence": {
+        "status": 200,
+        "blocked": true,
+        "tools_executed": [
+          "guardrail.prompt_injection"
+        ]
+      }
+    },
+    {
+      "id": "AI-003",
+      "category": "ai-rag-security",
+      "objective": "Prevent direct execution of unapproved owner-creation tools.",
+      "status": "PASS",
+      "control_expected": "crearDueno is refused and no owner row is inserted.",
+      "duration_ms": 41,
+      "evidence": {
+        "status": 200,
+        "rows_before": 0,
+        "rows_after": 0,
+        "tool": "crearDueno",
+        "refused": true
+      }
+    },
+    {
+      "id": "AI-004",
+      "category": "ai-rag-security",
+      "objective": "Require confirmation/orchestration before a caller invokes a write tool.",
+      "status": "FAIL",
+      "control_expected": "Supplying direct_tool cannot create a business record directly.",
+      "duration_ms": 40,
+      "evidence": {
+        "status": 200,
+        "direct_tool": "crearVacuna",
+        "business_row_created_without_confirmation": true
+      }
+    },
+    {
+      "id": "AI-005",
+      "category": "ai-rag-security",
+      "objective": "Keep tool reads scoped to the authenticated account.",
+      "status": "PASS",
+      "control_expected": "User A cannot retrieve user B bovino through direct tool arguments.",
+      "duration_ms": 28,
+      "evidence": {
+        "status": 200,
+        "tool": "getResumen",
+        "found_cross_user_record": false
+      }
+    },
+    {
+      "id": "AI-006",
+      "category": "ai-rag-security",
+      "objective": "Prevent cross-user RAG retrieval from semantic_contexts tied to another bovino.",
+      "status": "PASS",
+      "control_expected": "User A retrieved_context does not contain user B marker.",
+      "duration_ms": 81815,
+      "evidence": {
+        "status": 200,
+        "route": {
+          "agent": "rag",
+          "intent": "knowledge_query",
+          "confidence": 0.93,
+          "reason": "La pregunta es explicativa y pertenece al dominio ganadero."
+        },
+        "private_marker_retrieved": false,
+        "retrieved_count": 3
+      }
+    },
+    {
+      "id": "AI-007",
+      "category": "ai-rag-security",
+      "objective": "Require an explicit public classification before sharing unowned semantic context.",
+      "status": "FAIL",
+      "control_expected": "A semantic_contexts row with bovino_id NULL is not automatically global to every user.",
+      "duration_ms": 53387,
+      "evidence": {
+        "status": 200,
+        "route": {
+          "agent": "rag",
+          "intent": "knowledge_query",
+          "confidence": 0.93,
+          "reason": "La pregunta es explicativa y pertenece al dominio ganadero."
+        },
+        "unclassified_null_context_retrieved": true,
+        "retrieved_count": 3
+      }
+    },
+    {
+      "id": "PRIV-002",
+      "category": "privacy",
+      "objective": "Minimize or redact raw AI prompts at rest.",
+      "status": "FAIL",
+      "control_expected": "Unique prompt marker is not persisted in plaintext in ai_logs.",
+      "duration_ms": 45,
+      "evidence": {
+        "router_status": 200,
+        "plaintext_prompt_rows": 1,
+        "response_and_tool_fields_present": true
+      }
+    },
+    {
+      "id": "TRANSFER-001",
+      "category": "authorization",
+      "objective": "Keep current ownership unchanged while a transfer is pending.",
+      "status": "PASS",
+      "control_expected": "Owner remains user A until user B accepts.",
+      "duration_ms": 5,
+      "evidence": {
+        "request_status": 200,
+        "transfer_created": true,
+        "owner_unchanged": true
+      }
+    },
+    {
+      "id": "TRANSFER-002",
+      "category": "authorization",
+      "objective": "Allow only the destination user to accept a transfer.",
+      "status": "PASS",
+      "control_expected": "Source user cannot accept its own outgoing request.",
+      "duration_ms": 47,
+      "evidence": {
+        "status": 404,
+        "code": "NOT_FOUND"
+      }
+    },
+    {
+      "id": "TRANSFER-003",
+      "category": "authorization",
+      "objective": "Atomically move bovino ownership only after destination acceptance.",
+      "status": "PASS",
+      "control_expected": "Accepted transfer changes owner to user B and source loses direct CRUD access.",
+      "duration_ms": 71,
+      "evidence": {
+        "accept_status": 200,
+        "owner_is_destination": true,
+        "source_read_status": 404,
+        "destination_read_status": 200
+      }
+    },
+    {
+      "id": "PRIV-003",
+      "category": "privacy",
+      "objective": "Do not transfer user-authored personal memories implicitly with bovino ownership.",
+      "status": "FAIL",
+      "control_expected": "Linked memory remains with source, is redacted, or requires explicit consent/classification.",
+      "duration_ms": 4,
+      "evidence": {
+        "memory_transferred_to_destination": true
+      }
+    },
+    {
+      "id": "PRIV-004",
+      "category": "privacy",
+      "objective": "Limit former owners to the portion of transfer history relevant to them.",
+      "status": "FAIL",
+      "control_expected": "User A cannot see later B-to-admin identities after its ownership ended.",
+      "duration_ms": 101,
+      "evidence": {
+        "status": 200,
+        "future_third_party_email_visible": true,
+        "events_returned": 4
+      }
+    },
+    {
+      "id": "OBS-001",
+      "category": "errors-and-logging",
+      "objective": "Redact sensitive AI observability fields for regular users.",
+      "status": "PASS",
+      "control_expected": "Regular user receives only own rows and sensitive details are null/redacted.",
+      "duration_ms": 126,
+      "evidence": {
+        "status": 200,
+        "rows_returned": 1,
+        "all_rows_redacted": true
+      }
+    }
+  ],
+  "totals": {
+    "executed": 60,
+    "pass": 43,
+    "fail": 17,
+    "error": 0
+  },
+  "database_final_counts": {
+    "usuarios": 4,
+    "bovinos": 2,
+    "ai_logs": 1,
+    "activity_logs": 20,
+    "transfers": 2
+  }
+}

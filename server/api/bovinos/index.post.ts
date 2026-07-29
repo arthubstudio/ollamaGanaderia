@@ -1,4 +1,4 @@
-import { crearBovino } from "~/server/api/ia/tools/crearBovino";
+import { crearBovino } from "~/server/ai/tools/crearBovino";
 import { apiError, optionalDate, optionalText, runApi } from "~/server/utils/api";
 import { requireUserId } from "~/server/utils/session";
 

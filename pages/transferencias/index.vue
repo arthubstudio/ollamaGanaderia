@@ -19,7 +19,7 @@ let searchVersion = 0;
 watch(userSearch, (value) => {
   if (searchTimer) clearTimeout(searchTimer);
   const version = ++searchVersion;
-  if (value.trim().length < 2) {
+  if (value.trim().length < 3) {
     matches.value = [];
     searchLoading.value = false;
     return;
@@ -38,7 +38,7 @@ watch(userSearch, (value) => {
 });
 
 function selectUser(user: any) {
-  form.usuario_destino = user.email;
+  form.usuario_destino = user.recipient_key;
   userSearch.value = `${user.nombre} (${user.email})`;
   matches.value = [];
 }

@@ -1,12 +1,5 @@
-import postgres from "postgres";
 import { generarEmbedding } from "./embeddings";
-
-const sql = postgres(
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai",
-  {
-    prepare: false
-  }
-);
+import { sql } from "./db";
 
 function calcularEdad(fechaNacimiento: string | Date | null) {
 
@@ -365,6 +358,10 @@ ${v.fecha}
     INSERT INTO semantic_contexts (
 
       bovino_id,
+      owner_user_id,
+      scope,
+      source,
+      trusted,
       contenido,
       embedding,
       updated_at
@@ -374,6 +371,10 @@ ${v.fecha}
     VALUES (
 
       ${vacaId},
+      ${vaca.usuario_id},
+      'private',
+      'bovino_rebuild',
+      TRUE,
       ${contexto},
       ${vector}::vector,
       NOW()
@@ -385,7 +386,7 @@ ${v.fecha}
   } catch (error) {
     console.warn(
       "No se pudo reconstruir el contexto semantico del bovino:",
-      error
+      String((error as any)?.name ?? "Error")
     );
   }
 

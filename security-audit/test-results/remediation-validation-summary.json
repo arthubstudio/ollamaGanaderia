@@ -1,0 +1,30 @@
+{
+  "date": "2026-07-29",
+  "scope": "local isolated post-remediation validation",
+  "baselineScore": 62,
+  "provisionalPostRemediationScore": 94,
+  "checks": {
+    "unitTests": { "passed": 64, "failed": 0 },
+    "build": "pass",
+    "scriptTypecheck": "pass",
+    "dockerComposeConfig": "pass",
+    "npmAuditVulnerabilities": 0,
+    "npmTree": "pass",
+    "runtimeDatabaseRole": "pass",
+    "isolatedDatabaseBootstrap": "pass",
+    "knownSeedAccounts": 0,
+    "seedAdministrators": 0,
+    "unsafeSemanticContexts": 0,
+    "securityE2E": { "passed": 6, "failed": 0, "browser": "chromium" },
+    "iaE2E": { "passed": 1, "failed": 0, "browser": "chromium" },
+    "multiAgentE2E": { "passed": 4, "failed": 0, "browser": "chromium" },
+    "platformE2E": { "passed": 3, "failed": 0, "browsers": ["chromium", "firefox", "webkit"] },
+    "websocketE2E": { "passed": 1, "failed": 0, "browser": "chromium" },
+    "improvementsE2E": { "passed": 2, "failed": 0, "browser": "chromium" }
+  },
+  "notVerified": [
+    "post-remediation Cloudflare hostname",
+    "optional reranker image and model",
+    "image scanning and automated CI security matrix"
+  ]
+}

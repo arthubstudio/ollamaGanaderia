@@ -12,21 +12,28 @@ test.describe("chat comunitario por WebSocket", () => {
     const sourceEmail = `chat.origen.${stamp}@ganaderia.test`;
     const destinationEmail = `chat.destino.${stamp}@ganaderia.test`;
     const outsiderEmail = `chat.ajeno.${stamp}@ganaderia.test`;
-    const source = await playwrightRequest.newContext({ baseURL });
-    const destination = await playwrightRequest.newContext({ baseURL });
-    const outsider = await playwrightRequest.newContext({ baseURL });
+    const stampHex = stamp.toString(16).padStart(12, "0").slice(-12);
+    const requestOptions = {
+      baseURL,
+      extraHTTPHeaders: {
+        Origin: String(baseURL),
+        "CF-Connecting-IP": `2001:db8:11:${stampHex.slice(0, 4)}:${stampHex.slice(4, 8)}:${stampHex.slice(8, 12)}::1`
+      }
+    };
+    const source = await playwrightRequest.newContext(requestOptions);
+    const destination = await playwrightRequest.newContext(requestOptions);
+    const outsider = await playwrightRequest.newContext(requestOptions);
 
     const register = async (api: typeof source, nombre: string, email: string) => {
       const response = await api.post("/api/auth/register", {
         data: { nombre, email, password }
       });
       expect(response.ok()).toBeTruthy();
-      const user = await response.json();
       const login = await api.post("/api/auth/login", {
         data: { email, password }
       });
       expect(login.ok()).toBeTruthy();
-      return user;
+      return login.json();
     };
 
     const sourceUser = await register(source, sourceName, sourceEmail);

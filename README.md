@@ -53,6 +53,32 @@ Infraestructura y pruebas:
 npm install
 ```
 
+Parte de `.env.example` y configura credenciales locales unicas en `.env`:
+
+```env
+POSTGRES_USER=ganaderia
+POSTGRES_PASSWORD=usa-otra-contrasena-larga-y-aleatoria
+POSTGRES_DB=ganaderia_ai
+DATABASE_URL=postgres://ganaderia:usa-otra-contrasena-larga-y-aleatoria@127.0.0.1:5433/ganaderia_ai
+DATABASE_MIGRATION_URL=postgres://ganaderia:usa-otra-contrasena-larga-y-aleatoria@127.0.0.1:5433/ganaderia_ai
+```
+
+Despues de iniciar PostgreSQL, genera el secreto de sesion y configura el rol
+runtime sin privilegios. El comando actualiza `.env` sin imprimir secretos:
+
+```bash
+npm run db:runtime:configure
+npm run db:runtime:verify
+```
+
+La aplicacion exige `DATABASE_RUNTIME_URL`; `DATABASE_MIGRATION_URL` queda
+reservada para migraciones y administracion. PostgreSQL, Ollama y el reranker
+solo se publican en la interfaz local `127.0.0.1`.
+
+El registro solicita solamente nombre, correo electronico y contrasena. El
+endpoint conserva validacion server-side y limite de solicitudes por IP.
+La respuesta es deliberadamente generica para no revelar si un correo ya existe.
+
 ## Levantar servicios
 
 ```bash
@@ -92,6 +118,11 @@ npm run db:migrate:week7
 npm run db:migrate:platform
 npm run db:migrate:improvements
 npm run db:migrate:websocket
+npm run db:migrate:security
+npm run db:migrate:security-remediation
+npm run db:migrate:account-security
+npm run db:runtime:configure
+npm run db:runtime:verify
 ```
 
 En una base nueva, Docker Compose ejecuta `database/seeds.sql` y despues las migraciones montadas como scripts de inicializacion. En un volumen existente se deben ejecutar los comandos anteriores manualmente.
@@ -120,12 +151,10 @@ Abrir:
 http://localhost:3000
 ```
 
-Usuario demo:
-
-```text
-Email: pedro@gmail.com
-Password: 123456
-```
+No hay cuentas demo ni administradores con credenciales conocidas. Registra un
+usuario desde `/register`. Para crear o rotar un administrador de forma explicita,
+define temporalmente `ADMIN_NAME`, `ADMIN_EMAIL` y una `ADMIN_PASSWORD` robusta y
+ejecuta `npm run admin:bootstrap`; elimina la variable de password al terminar.
 
 ## Pruebas E2E
 
@@ -153,6 +182,12 @@ Ejecutar las pruebas de vacunacion, venta, relaciones, contexto y loading:
 npm run test:e2e:improvements
 ```
 
+Ejecutar las pruebas de seguridad de login, IA y observabilidad:
+
+```bash
+npm run test:e2e:security
+```
+
 Ver reporte de Playwright:
 
 ```bash
@@ -161,18 +196,54 @@ npx playwright show-report
 
 ## Exposicion publica
 
-Con Cloudflare Tunnel:
+Para una exposicion publica evita tunelizar el servidor Vite de desarrollo.
+Genera y sirve el bundle de produccion, que no publica rutas locales,
+sourcemaps ni HMR de Vite:
+
+El servidor publico local usa `http://localhost:3001` por defecto para no
+confundirse con Vite, que permanece en `http://localhost:3000`. Puedes cambiar
+el puerto con `TUNNEL_PORT` en `.env`.
+
+Con un hostname estable, configura primero en `.env` la URL y el host exactos:
+
+```env
+NUXT_PUBLIC_APP_ORIGIN=https://ganaderia.example.com
+NUXT_ALLOWED_HOSTS=ganaderia.example.com
+NUXT_TRUST_PROXY=loopback
+```
+
+Luego inicia el build Nitro y apunta el tunel al puerto 3001:
 
 ```bash
-cloudflared tunnel --url http://localhost:3000
+npm run tunnel:serve
+cloudflared tunnel --url http://localhost:3001
 ```
+
+Para un Quick Tunnel con URL temporal usa un solo comando:
+
 ```bash
-SELECT COUNT(*) FROM bovinos;
+npm run tunnel:quick
 ```
+
+El comando compila la aplicacion, obtiene la URL aleatoria de Cloudflare e
+inyecta su origen y hostname exactos solo durante esa ejecucion. No modifica
+`.env` y no requiere copiar el nuevo subdominio. Presiona `Ctrl+C` para detener
+Nitro y Cloudflare Tunnel.
+
+No apuntes Cloudflare a `http://localhost:3000`: ese puerto corresponde a Vite
+en desarrollo y acepta unicamente hosts locales. Tampoco agregues
+`allowedHosts: true` ni comodines como `.trycloudflare.com`.
+
+Comando Cloudflare manual para un hostname ya configurado:
+
+```bash
+cloudflared tunnel --url http://localhost:3001
+```
+
 Con Ngrok:
 
 ```bash
-ngrok http 3000
+ngrok http 3001
 ```
 
 ## Comandos utiles
@@ -270,6 +341,8 @@ Usuario -> Router determinista -> Agente RAG -> Hybrid Search -> Reranker -> Oll
 npm install
 docker compose up -d
 npm run db:seed
+npm run db:runtime:configure
+npm run db:runtime:verify
 npm run dev
 npm run seed:stress -- --count=10000 --batch=semana07-10k
 npm run seed:stress -- --count=50000 --batch=semana07-50k
@@ -279,21 +352,23 @@ npm run test:e2e
 
 ## Notas para Semana 6
 
-- El flujo principal local es `npm install`, `docker compose up -d`, `npm run db:seed`, `npm run dev`.
+- El flujo principal local es `npm install`, `docker compose up -d`, `npm run db:seed`, `npm run db:runtime:configure`, `npm run db:runtime:verify`, `npm run dev`.
 - Para probar IA, Ollama debe tener descargados `llama3.2:latest` y `nomic-embed-text`.
 - La prueba `e2e/ia.spec.ts` valida login, entrada al asistente y respuesta a `¿Qué puedes hacer?`.
-- La exposicion publica puede hacerse con Cloudflare Tunnel o Ngrok apuntando a `http://localhost:3000`.
+- La exposicion publica puede hacerse con Cloudflare Tunnel o Ngrok apuntando al servidor Nitro en `http://localhost:3001`.
 
 ## Riesgos conocidos
 
-- La autenticacion usa cookie HttpOnly firmada; los usuarios demo legacy actualizan su hash al iniciar sesion.
-- Hay credenciales locales hardcodeadas.
+- La autenticacion usa sesiones v3 cifradas y revocables, almacenadas como hash en PostgreSQL; una cuenta solo conserva una sesion activa.
+- `.env` contiene secretos locales y no debe publicarse ni incluirse en capturas.
 - Algunos endpoints usan Drizzle y otros SQL directo.
 - `database/schema.sql`, `database/seeds.sql` y `drizzle/schema.ts` no estan completamente sincronizados.
 - Hay textos heredados con el nombre anterior `vacas`.
 - Hay problemas de encoding visibles en algunas vistas.
 - El reranker BGE requiere RAM, almacenamiento y una descarga inicial considerable.
 - El estado conversacional pendiente vive en memoria y no se comparte entre multiples instancias.
+- El registro publico no verifica por correo la propiedad de la direccion; conserva respuesta generica y limites persistentes, pero una publicacion permanente requiere verificacion de email o una politica de alta aprobada.
+- El Quick Tunnel automatico fue comprobado con un hostname nuevo y `/login` respondio HTTP 200 sin bloqueo de host. La calificacion permanece provisional hasta repetir la matriz publica completa y construir el perfil opcional del reranker.
 - Las metricas de Semana 7 solo deben citarse despues de ejecutar el seeder y el evaluador en el equipo de entrega.
 
 ## Plataforma de transferencias y comunidad
@@ -318,7 +393,7 @@ Funcionalidades disponibles:
 - `/bovinos/:id/historial`: bitacora permanente de transferencias del bovino.
 - `/observabilidad`: logs IA y auditoria operativa.
 
-La aceptacion de una transferencia se ejecuta dentro de una transaccion con bloqueo de filas. Cambia `bovinos.usuario_id`, actualiza el rancho activo y las relaciones de propietarios, y mantiene pesos, enfermedades, historial, contextos y cualquier relacion ligada por `bovino_id`. Las vacunas aplicadas se enlazan al catalogo equivalente del receptor y las memorias que tengan `bovino_id` cambian de cuenta.
+La aceptacion de una transferencia se ejecuta dentro de una transaccion con bloqueo de filas. Cambia `bovinos.usuario_id`, actualiza el rancho activo y las relaciones de propietarios, y mantiene pesos, enfermedades, historial, contextos y cualquier relacion ganadera ligada por `bovino_id`. Las vacunas aplicadas se enlazan al catalogo equivalente del receptor; las memorias personales permanecen en la cuenta que las creo.
 
 Si el arete ya existe en la cuenta receptora, se genera el siguiente arete atomico de esa cuenta y ambos valores quedan registrados en el historial de transferencia.
 

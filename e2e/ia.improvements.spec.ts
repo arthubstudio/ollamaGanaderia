@@ -25,8 +25,16 @@ test.describe("mejoras de IA, vacunacion, venta y relaciones", () => {
     const friendEmail = `amigo.${stamp}@ganaderia.test`;
     const friendUsername = `amigo${stamp}`;
     const password = "Prueba123456";
-    const source = await playwrightRequest.newContext({ baseURL });
-    const friend = await playwrightRequest.newContext({ baseURL });
+    const stampHex = stamp.toString(16).padStart(12, "0").slice(-12);
+    const requestOptions = {
+      baseURL,
+      extraHTTPHeaders: {
+        Origin: String(baseURL),
+        "CF-Connecting-IP": `2001:db8:12:${stampHex.slice(0, 4)}:${stampHex.slice(4, 8)}:${stampHex.slice(8, 12)}::1`
+      }
+    };
+    const source = await playwrightRequest.newContext(requestOptions);
+    const friend = await playwrightRequest.newContext(requestOptions);
 
     try {
       expect((await source.post("/api/auth/register", {
@@ -208,8 +216,12 @@ test.describe("mejoras de IA, vacunacion, venta y relaciones", () => {
     const stamp = Date.now();
     const email = `loading.${stamp}@ganaderia.test`;
     const password = "Prueba123456";
+    const stampHex = stamp.toString(16).padStart(12, "0").slice(-12);
 
     const register = await page.request.post("/api/auth/register", {
+      headers: {
+        "CF-Connecting-IP": `2001:db8:13:${stampHex.slice(0, 4)}:${stampHex.slice(4, 8)}:${stampHex.slice(8, 12)}::1`
+      },
       data: { nombre: `Loading ${stamp}`, email, password }
     });
     expect(register.ok()).toBeTruthy();

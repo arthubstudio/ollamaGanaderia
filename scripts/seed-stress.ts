@@ -24,8 +24,10 @@ const realEmbeddings = Math.min(
   requestedCount,
   asPositiveInteger(argumentValue("real-embeddings"), 0)
 );
-const databaseUrl = process.env.DATABASE_URL ??
-  "postgres://ganaderia:ganaderia123@127.0.0.1:5433/ganaderia_ai";
+const databaseUrl = process.env.DATABASE_URL?.trim();
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL es obligatoria para ejecutar seed:stress.");
+}
 const sql = postgres(databaseUrl, { prepare: false, max: 1 });
 
 const bovinosCount = Math.max(1, Math.floor(requestedCount * 0.3));
@@ -224,9 +226,16 @@ try {
         SELECT n, ((n - 1) % ${bovinosCount}) + 1 AS bovino_rn
         FROM generate_series(1, ${contextosCount}) AS series(n)
       )
-      INSERT INTO semantic_contexts (bovino_id, contenido, embedding, updated_at)
+      INSERT INTO semantic_contexts (
+        bovino_id, owner_user_id, scope, source, trusted,
+        contenido, embedding, updated_at
+      )
       SELECT
         b.id,
+        ${usuarioId},
+        'private',
+        'stress_seed',
+        TRUE,
         ${`STRESS_BATCH=${batchKey}; `} ||
           'Bovino ficticio ' || b.nombre || ' con arete ' || b.numero_arete ||
           '. Contexto de rendimiento numero ' || g.n || '.',
@@ -296,4 +305,3 @@ try {
 } finally {
   await sql.end();
 }
-

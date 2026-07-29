@@ -65,20 +65,20 @@ function yesNo(value: unknown) {
           >
             <td class="p-4">{{ log.id }}</td>
             <td class="p-4 text-xs text-gray-500 max-w-[100px] truncate">
-              {{ log.session_id }}
+              {{ log.details_redacted ? "Protegida" : log.session_id }}
             </td>
             <td class="p-4 max-w-[180px]">
-              <span class="line-clamp-2">{{ log.user_prompt }}</span>
+              <span class="line-clamp-2">{{ log.details_redacted ? "Contenido protegido" : log.user_prompt }}</span>
             </td>
             <td class="p-4 max-w-[180px]">
-              <span class="line-clamp-2">{{ log.system_response }}</span>
+              <span class="line-clamp-2">{{ log.details_redacted ? "Contenido protegido" : log.system_response }}</span>
             </td>
             <td class="p-4 font-semibold capitalize">
-              {{ log.selected_agent || "direct" }}
+              {{ log.details_redacted ? "-" : (log.selected_agent || "direct") }}
             </td>
             <td class="p-4 text-sm max-w-[150px]">
-              <div>{{ log.intent || "-" }}</div>
-              <div class="text-xs text-gray-500">
+              <div>{{ log.details_redacted ? "-" : (log.intent || "-") }}</div>
+              <div v-if="!log.details_redacted" class="text-xs text-gray-500">
                 Confianza: {{ log.confidence != null ? Number(log.confidence).toFixed(2) : "-" }}
               </div>
             </td>

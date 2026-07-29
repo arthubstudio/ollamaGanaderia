@@ -1,29 +1,35 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector@sha256:00ba258a66dac104fd5171074a0084462a64a1369d8513f3d0a634e2f24d15bc
     container_name: ganaderia_db
     restart: always
     environment:
-      POSTGRES_USER: ganaderia
-      POSTGRES_PASSWORD: ganaderia123
-      POSTGRES_DB: ganaderia_ai
+      POSTGRES_USER: ${POSTGRES_USER:?Configura POSTGRES_USER en .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configura POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Configura POSTGRES_DB en .env}
+      APP_DB_USER: ${APP_DB_USER:-}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/seeds.sql:/docker-entrypoint-initdb.d/001-seeds.sql:ro
       - ./database/migrations/004_comunidad_transferencias_razas.sql:/docker-entrypoint-initdb.d/004-comunidad-transferencias-razas.sql:ro
       - ./database/migrations/005_vacunacion_relaciones_venta.sql:/docker-entrypoint-initdb.d/005-vacunacion-relaciones-venta.sql:ro
       - ./database/migrations/006_chat_websocket.sql:/docker-entrypoint-initdb.d/006-chat-websocket.sql:ro
+      - ./database/migrations/007_security_hardening.sql:/docker-entrypoint-initdb.d/007-security-hardening.sql:ro
+      - ./database/migrations/008_security_remediation.sql:/docker-entrypoint-initdb.d/008-security-remediation.sql:ro
+      - ./database/migrations/009_compromised_seed_accounts.sql:/docker-entrypoint-initdb.d/009-account-security.sql:ro
+      - ./database/init/009-runtime-role.sh:/docker-entrypoint-initdb.d/009-runtime-role.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ganaderia -d ganaderia_ai"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama@sha256:c484b703176aa19dfc0a54cbfb60ab8094b38faa04283fb77eba1d33319e5eca
     container_name: ollamaganaderia
     restart: always
     ports:
@@ -49,7 +55,19 @@ services:
     ports:
       - "127.0.0.1:8010:8010"
     volumes:
-      - reranker_cache:/root/.cache/huggingface
+      - reranker_cache:/home/reranker/.cache/huggingface
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health')"]
       interval: 30s

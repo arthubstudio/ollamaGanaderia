@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => runApi(async () => {
   `;
   if (!existing.length) apiError({ statusCode: 404, code: "NOT_FOUND", message: "Peso no encontrado." });
   const rows = await sql`
-    UPDATE pesos SET peso = ${positiveNumber(body?.peso, "El peso")},
+    UPDATE pesos SET peso = ${positiveNumber(body?.peso, "El peso", 2500)},
       fecha = ${optionalDate(body?.fecha, "La fecha") ?? new Date().toISOString().slice(0, 10)}
     WHERE id = ${id} RETURNING *
   `;

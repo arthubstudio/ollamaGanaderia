@@ -1,4 +1,5 @@
 import { createError } from "h3";
+import { safeErrorDetails } from "~/server/utils/safeLogging";
 
 type ApiErrorOptions = {
   statusCode: number;
@@ -90,12 +91,12 @@ export function requiredDate(value: unknown, field: string) {
   return date;
 }
 
-export function positiveNumber(value: unknown, field: string) {
+export function positiveNumber(value: unknown, field: string, max?: number) {
   if (value === "" || value === null || value === undefined) {
     apiError({ statusCode: 400, code: "INVALID_NUMBER", message: `${field} no es valido.` });
   }
   const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) {
+  if (!Number.isFinite(number) || number <= 0 || (max !== undefined && number > max)) {
     apiError({ statusCode: 400, code: "INVALID_NUMBER", message: `${field} no es valido.` });
   }
   return number;
@@ -112,7 +113,7 @@ export async function runApi<T>(operation: () => Promise<T>) {
   } catch (error: any) {
     if (error?.statusCode) throw error;
 
-    console.error("API operation failed", error);
+    console.error("API operation failed", safeErrorDetails(error));
 
     if (error?.code === "23505") {
       apiError({ statusCode: 409, code: "DUPLICATE", message: "Ya existe un registro con esos datos." });

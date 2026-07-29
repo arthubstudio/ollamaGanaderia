@@ -4,24 +4,36 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
+    "start": "node --env-file=.env scripts/start-production.mjs",
+    "tunnel:start": "node --env-file=.env scripts/start-tunnel.mjs",
+    "tunnel:serve": "npm run build && npm run tunnel:start",
+    "tunnel:quick": "npm run build && node --env-file=.env scripts/quick-tunnel.mjs",
+    "tunnel:quick:check": "node scripts/quick-tunnel.mjs --check",
     "db:seed": "docker exec -i ganaderia_db psql -U ganaderia -d ganaderia_ai < database/seeds.sql",
     "db:migrate:week7": "docker exec -i ganaderia_db psql -U ganaderia -d ganaderia_ai < database/migrations/003_semana_07_multiagente.sql",
     "db:migrate:platform": "docker exec -i ganaderia_db psql -v ON_ERROR_STOP=1 -U ganaderia -d ganaderia_ai < database/migrations/004_comunidad_transferencias_razas.sql",
     "db:migrate:improvements": "docker exec -i ganaderia_db psql -v ON_ERROR_STOP=1 -U ganaderia -d ganaderia_ai < database/migrations/005_vacunacion_relaciones_venta.sql",
     "db:migrate:websocket": "docker exec -i ganaderia_db psql -v ON_ERROR_STOP=1 -U ganaderia -d ganaderia_ai < database/migrations/006_chat_websocket.sql",
+    "db:migrate:security": "docker exec -i ganaderia_db psql -v ON_ERROR_STOP=1 -U ganaderia -d ganaderia_ai < database/migrations/007_security_hardening.sql",
+    "db:migrate:security-remediation": "docker exec -i ganaderia_db psql -v ON_ERROR_STOP=1 -U ganaderia -d ganaderia_ai < database/migrations/008_security_remediation.sql",
+    "db:migrate:account-security": "docker exec -i ganaderia_db psql -v ON_ERROR_STOP=1 -U ganaderia -d ganaderia_ai < database/migrations/009_compromised_seed_accounts.sql",
+    "db:runtime:configure": "node --env-file=.env scripts/configure-runtime-db.mjs",
+    "db:runtime:verify": "node --env-file=.env scripts/verify-runtime-db.mjs",
+    "admin:bootstrap": "node --env-file=.env scripts/bootstrap-admin.mjs",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "test": "tsx --test tests/iaActionPlanner.test.mjs tests/ventaReadiness.test.mjs tests/vaccinationInterval.test.ts tests/iaMemoryPerspective.test.mjs tests/routerAgent.test.ts tests/hybridSearch.test.ts tests/fullTextSearch.test.ts tests/iaResponse.test.ts",
+    "test": "tsx --tsconfig .nuxt/tsconfig.server.json --test tests/iaActionPlanner.test.mjs tests/ventaReadiness.test.mjs tests/vaccinationInterval.test.ts tests/iaMemoryPerspective.test.mjs tests/routerAgent.test.ts tests/iaLanguageUnderstanding.test.ts tests/hybridSearch.test.ts tests/fullTextSearch.test.ts tests/iaResponse.test.ts tests/securityHardening.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ia": "playwright test e2e/ia.spec.ts",
     "test:e2e:multi-agent": "playwright test e2e/ia.multi-agent.spec.ts",
     "test:e2e:platform": "playwright test e2e/platform.spec.ts",
     "test:e2e:chat": "playwright test e2e/community.websocket.spec.ts --project=chromium",
     "test:e2e:improvements": "playwright test e2e/ia.improvements.spec.ts --project=chromium",
-    "seed:stress": "tsx scripts/seed-stress.ts",
-    "evaluate:agent": "tsx scripts/evaluar-agente.ts",
+    "test:e2e:security": "playwright test e2e/security.spec.ts --project=chromium",
+    "seed:stress": "node --env-file=.env --import tsx scripts/seed-stress.ts",
+    "evaluate:agent": "node --env-file=.env --import tsx scripts/evaluar-agente.ts",
     "typecheck:scripts": "tsc --ignoreConfig --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck scripts/seed-stress.ts scripts/evaluar-agente.ts"
   },
   "dependencies": {
@@ -34,13 +46,37 @@
     "vue": "^3.5.34"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.120",
+    "@iconify-json/mdi": "^1.2.3",
     "@nuxtjs/tailwindcss": "^6.14.0",
     "@playwright/test": "^1.61.1",
     "@types/node": "^26.0.1",
     "@types/pdfkit": "^0.17.6",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.1",
     "pdfkit": "^0.19.1",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    },
+    "vite": {
+      "esbuild": "0.28.1"
+    },
+    "terser": {
+      "source-map-support": "0.5.21"
+    },
+    "archiver-utils": {
+      "glob": "13.0.6"
+    },
+    "archiver": {
+      "readdir-glob": "3.0.0",
+      "zip-stream": "7.0.5"
+    },
+    "tailwind-config-viewer": {
+      "replace-in-file": "8.4.0"
+    }
   }
 }
